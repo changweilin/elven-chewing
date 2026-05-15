@@ -88,6 +88,12 @@ pub struct ChewingTsfConfig {
     pub dual_input_mode: bool,
     #[serde(default)]
     pub dual_input_initial_track: i32,
+    #[serde(default = "default_dual_track_switch_with_keybind")]
+    pub dual_track_switch_with_keybind: bool,
+}
+
+fn default_dual_track_switch_with_keybind() -> bool {
+    true
 }
 
 impl Default for ChewingTsfConfig {
@@ -143,6 +149,11 @@ impl Default for ChewingTsfConfig {
                     action: "selecting_unlearn_phrase".to_string(),
                     param: "".to_string(),
                 },
+                KeybindValue {
+                    key: "Ctrl+F11".to_string(),
+                    action: "toggle_dual_track".to_string(),
+                    param: "".to_string(),
+                },
             ],
             auto_check_update_channel: "stable".to_string(),
             update_info_url: "".to_string(),
@@ -150,6 +161,7 @@ impl Default for ChewingTsfConfig {
             modified_timestamp: 0,
             dual_input_mode: false,
             dual_input_initial_track: 0,
+            dual_track_switch_with_keybind: true,
         }
     }
 }
@@ -325,6 +337,9 @@ impl Config {
         if let Ok(value) = reg_get_i32(&key, "DualInputInitialTrack") {
             cfg.dual_input_initial_track = value;
         }
+        if let Ok(value) = reg_get_bool(&key, "DualTrackSwitchWithKeybind") {
+            cfg.dual_track_switch_with_keybind = value;
+        }
 
         Ok(Config {
             chewing_tsf: cfg,
@@ -451,6 +466,11 @@ impl Config {
             &key,
             "DualInputInitialTrack",
             chewing_tsf.dual_input_initial_track,
+        );
+        let _ = reg_set_bool(
+            &key,
+            "DualTrackSwitchWithKeybind",
+            chewing_tsf.dual_track_switch_with_keybind,
         );
         let _ = key.set_string(
             "AutoCheckUpdateChannel",

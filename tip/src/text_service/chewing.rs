@@ -461,7 +461,9 @@ impl ChewingTextService {
         // Step 2.1 handle switch lang with Shift (or dual track toggle)
         //
         if (evt.ksym == SYM_LEFTSHIFT || evt.ksym == SYM_RIGHTSHIFT)
-            && (self.cfg.chewing_tsf.switch_lang_with_shift || self.dual_state.is_some())
+            && (self.cfg.chewing_tsf.switch_lang_with_shift
+                || (self.dual_state.is_some()
+                    && !self.cfg.chewing_tsf.dual_track_switch_with_keybind))
         {
             return Ok(true);
         }
@@ -581,12 +583,34 @@ impl ChewingTextService {
         debug!(evt:?; "on_keydown");
 
         if (evt.ksym == SYM_LEFTSHIFT || evt.ksym == SYM_RIGHTSHIFT)
-            && (self.cfg.chewing_tsf.switch_lang_with_shift || self.dual_state.is_some())
+            && (self.cfg.chewing_tsf.switch_lang_with_shift
+                || (self.dual_state.is_some()
+                    && !self.cfg.chewing_tsf.dual_track_switch_with_keybind))
             && matches!(self.shift_key_state, ShiftKeyState::Up)
         {
             debug!("shift_key_state = Down");
             self.shift_key_state = ShiftKeyState::Down(Instant::now());
             return Ok(false);
+        }
+
+        // 雙排模式 + English 軌道按 Enter: 不論 chewing 內部注音 buffer 狀態如何
+        // (不合法、不完整、空白等),都直接送出 raw_english,並重置 chewing 狀態。
+        // 否則 chewing 可能會 Absorb 或 Ignore 這個 Enter,造成使用者輸入消失。
+        if evt.ksym == SYM_RETURN
+            && let Some(ds) = self.dual_state.as_ref()
+            && ds.active == DualTrack::English
+            && !ds.raw_english.is_empty()
+        {
+            let text = ds.raw_english.clone();
+            self.chewing_editor.clear_syllable_editor();
+            self.chewing_editor.commit()?;
+            self.chewing_editor.ack();
+            self.insert_text(context, &text)?;
+            self.dual_on_commit();
+            self.update_preedit(context, String::new())?;
+            let _ = self.dual_hide_preview();
+            debug!(text; "dual english commit on enter");
+            return Ok(true);
         }
 
         // Handle keybindings
@@ -598,6 +622,9 @@ impl ChewingTextService {
             match keybinding.action.as_str() {
                 "toggle_simplified_chinese" => {
                     self.toggle_simp_chinese()?;
+                }
+                "toggle_dual_track" => {
+                    self.dual_toggle_active(context)?;
                 }
                 "toggle_hsu_keyboard" => {
                     self.toggle_hsu_keyboard(context)?;
@@ -755,22 +782,6 @@ impl ChewingTextService {
         let last_behavior = self.chewing_editor.last_key_behavior();
 
         if last_behavior == EditorKeyBehavior::Ignore {
-            // 雙排模式 + English 軌道: 即便 chewing 因注音 buffer 不合法而忽略 Enter,
-            // 也要送出 raw_english,避免英文軌的內容被吞掉。
-            if evt.ksym == SYM_RETURN
-                && let Some(ds) = self.dual_state.as_ref()
-                && ds.active == DualTrack::English
-                && !ds.raw_english.is_empty()
-            {
-                let text = ds.raw_english.clone();
-                self.chewing_editor.clear_syllable_editor();
-                self.insert_text(context, &text)?;
-                self.dual_on_commit();
-                self.update_preedit(context, String::new())?;
-                let _ = self.dual_hide_preview();
-                debug!(text; "dual english commit on ignored enter");
-                return Ok(true);
-            }
             debug!("early return - chewing ignored key");
             return Ok(false);
         }
@@ -859,7 +870,10 @@ impl ChewingTextService {
                 duration < Duration::from_millis(self.cfg.chewing_tsf.shift_key_sensitivity as u64)
             });
 
-        if short_shift_press && self.dual_state.is_some() {
+        if short_shift_press
+            && self.dual_state.is_some()
+            && !self.cfg.chewing_tsf.dual_track_switch_with_keybind
+        {
             // 雙排模式接管 Shift: 切換 active 軌道,bypass mode toggle
             self.dual_toggle_active(context)?;
         } else if short_shift_press && self.cfg.chewing_tsf.switch_lang_with_shift {
@@ -1717,9 +1731,12 @@ impl ChewingTextService {
             .unwrap_or(KeyboardLayoutCompat::Default);
         self.chewing_editor = Self::build_editor_from_cfg(cfg)?;
         let _ = self.update_lang_buttons();
+        let dual_track_keybind_active =
+            cfg.dual_input_mode && cfg.dual_track_switch_with_keybind;
         let keybindings = cfg
             .keybind
             .iter()
+            .filter(|kb| kb.action != "toggle_dual_track" || dual_track_keybind_active)
             .filter_map(|kb| Keybinding::try_from(kb).ok())
             .collect();
         self.keybindings = keybindings;
