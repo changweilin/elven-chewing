@@ -141,6 +141,7 @@ BEGIN
         END
         MENUITEM "輸出全形英數字母 (&F)",             ID_SWITCH_SHAPE
         MENUITEM "輸出簡體中文 (&S)",                 ID_OUTPUT_SIMP_CHINESE
+        MENUITEM "模糊注音猜詞 (聲母/前幾碼) (&Z)",         ID_PARTIAL_SYLLABLE_MATCH
     END
 END
 

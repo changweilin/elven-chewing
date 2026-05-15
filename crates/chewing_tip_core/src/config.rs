@@ -90,6 +90,8 @@ pub struct ChewingTsfConfig {
     pub dual_input_initial_track: i32,
     #[serde(default = "default_dual_track_switch_with_keybind")]
     pub dual_track_switch_with_keybind: bool,
+    #[serde(default)]
+    pub partial_syllable_match: bool,
 }
 
 fn default_dual_track_switch_with_keybind() -> bool {
@@ -162,6 +164,7 @@ impl Default for ChewingTsfConfig {
             dual_input_mode: false,
             dual_input_initial_track: 0,
             dual_track_switch_with_keybind: true,
+            partial_syllable_match: false,
         }
     }
 }
@@ -340,6 +343,9 @@ impl Config {
         if let Ok(value) = reg_get_bool(&key, "DualTrackSwitchWithKeybind") {
             cfg.dual_track_switch_with_keybind = value;
         }
+        if let Ok(value) = reg_get_bool(&key, "PartialSyllableMatch") {
+            cfg.partial_syllable_match = value;
+        }
 
         Ok(Config {
             chewing_tsf: cfg,
@@ -471,6 +477,11 @@ impl Config {
             &key,
             "DualTrackSwitchWithKeybind",
             chewing_tsf.dual_track_switch_with_keybind,
+        );
+        let _ = reg_set_bool(
+            &key,
+            "PartialSyllableMatch",
+            chewing_tsf.partial_syllable_match,
         );
         let _ = key.set_string(
             "AutoCheckUpdateChannel",

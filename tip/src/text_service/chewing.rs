@@ -216,6 +216,7 @@ pub(super) struct ChewingTextService {
 
     has_focus: bool,
     output_simp_chinese: bool,
+    partial_syllable_match: bool,
     shift_key_state: ShiftKeyState,
     cfg: Config,
     kbtype: KeyboardLayoutCompat,
@@ -340,6 +341,7 @@ impl ChewingTextService {
             lang_mode: Cell::new(TsfLangMode::English),
             has_focus: true,
             output_simp_chinese: Default::default(),
+            partial_syllable_match: Default::default(),
             shift_key_state: ShiftKeyState::Up,
             cfg,
             kbtype: KeyboardLayoutCompat::Default,
@@ -1087,6 +1089,11 @@ impl ChewingTextService {
                         error!("unable to toggle simplified chinese: {error}");
                     }
                 }
+                ID_PARTIAL_SYLLABLE_MATCH => {
+                    if let Err(error) = self.toggle_partial_syllable_match() {
+                        error!("unable to toggle partial syllable match: {error}");
+                    }
+                }
                 ID_CHECK_NEW_VER => open_url(&self.cfg.chewing_tsf.update_info_url),
                 ID_ABOUT => open_url("chewing-preferences://about"),
                 ID_WEBSITE => open_url("https://chewing.im/"),
@@ -1478,6 +1485,58 @@ impl ChewingTextService {
         Ok(())
     }
 
+    fn toggle_partial_syllable_match(&mut self) -> Result<()> {
+        self.partial_syllable_match = !self.partial_syllable_match;
+        debug!(
+            "toggle partial syllable match: {}",
+            self.partial_syllable_match
+        );
+        let cfg = &self.cfg.chewing_tsf;
+        // 切換時直接調整現有 editor 的 conversion engine 與 lookup strategy，
+        // 避免 rebuild_editor 造成 composition / 學習狀態被重置。
+        if self.partial_syllable_match {
+            self.chewing_editor.set_editor_options(|opt| {
+                opt.conversion_engine = ConversionEngineKind::FuzzyChewingEngine;
+                opt.lookup_strategy = LookupStrategy::FuzzyPartialPrefix;
+            });
+            self.chewing_editor
+                .set_conversion_engine(Box::new(FuzzyChewingEngine::new()));
+        } else {
+            let (engine_kind, strategy) = match cfg.conv_engine {
+                0 => (ConversionEngineKind::SimpleEngine, LookupStrategy::Standard),
+                2 => (
+                    ConversionEngineKind::FuzzyChewingEngine,
+                    LookupStrategy::FuzzyPartialPrefix,
+                ),
+                _ => (ConversionEngineKind::ChewingEngine, LookupStrategy::Standard),
+            };
+            self.chewing_editor.set_editor_options(|opt| {
+                opt.conversion_engine = engine_kind;
+                opt.lookup_strategy = strategy;
+            });
+            match engine_kind {
+                ConversionEngineKind::SimpleEngine => self
+                    .chewing_editor
+                    .set_conversion_engine(Box::new(SimpleEngine::new())),
+                ConversionEngineKind::ChewingEngine => self
+                    .chewing_editor
+                    .set_conversion_engine(Box::new(ChewingEngine::new())),
+                ConversionEngineKind::FuzzyChewingEngine => self
+                    .chewing_editor
+                    .set_conversion_engine(Box::new(FuzzyChewingEngine::new())),
+            }
+        }
+        let check_flag = if self.partial_syllable_match {
+            MF_CHECKED
+        } else {
+            MF_UNCHECKED
+        };
+        unsafe {
+            CheckMenuItem(self.popup_menu, ID_PARTIAL_SYLLABLE_MATCH, check_flag.0);
+        }
+        Ok(())
+    }
+
     fn toggle_shape_mode(&mut self) -> Result<()> {
         self.chewing_editor.set_editor_options(|opt| {
             opt.character_form = match opt.character_form {
@@ -1622,7 +1681,10 @@ impl ChewingTextService {
         Ok(())
     }
 
-    fn build_editor_from_cfg(cfg: &ChewingTsfConfig) -> Result<Editor> {
+    fn build_editor_from_cfg(
+        cfg: &ChewingTsfConfig,
+        partial_syllable_match: bool,
+    ) -> Result<Editor> {
         let user_path = user_dir().map_err(into_anyhow)?;
         let chewing_path = format!(
             "{};{}",
@@ -1668,6 +1730,13 @@ impl ChewingTextService {
                 2 => LookupStrategy::FuzzyPartialPrefix,
                 _ => LookupStrategy::Standard,
             };
+            // 模糊注音猜詞: 使用者打開後不論 conv_engine 設定為何，
+            // 強制套用 FuzzyChewingEngine + FuzzyPartialPrefix，使不完整的
+            // 注音 (僅聲母或前幾碼) 也能在候選窗中找到對應詞彙。
+            if partial_syllable_match {
+                opt.conversion_engine = ConversionEngineKind::FuzzyChewingEngine;
+                opt.lookup_strategy = LookupStrategy::FuzzyPartialPrefix;
+            }
             // TODO experimental
             opt.auto_snapshot_selections = true;
         });
@@ -1700,6 +1769,7 @@ impl ChewingTextService {
     fn apply_init_config(&mut self) -> Result<()> {
         let cfg = &self.cfg.chewing_tsf;
         self.output_simp_chinese = cfg.output_simp_chinese;
+        self.partial_syllable_match = cfg.partial_syllable_match;
         let check_flag = if self.output_simp_chinese {
             MF_CHECKED
         } else {
@@ -1707,6 +1777,14 @@ impl ChewingTextService {
         };
         unsafe {
             CheckMenuItem(self.popup_menu, ID_OUTPUT_SIMP_CHINESE, check_flag.0);
+        }
+        let psm_flag = if self.partial_syllable_match {
+            MF_CHECKED
+        } else {
+            MF_UNCHECKED
+        };
+        unsafe {
+            CheckMenuItem(self.popup_menu, ID_PARTIAL_SYLLABLE_MATCH, psm_flag.0);
         }
         self.chewing_editor.set_editor_options(|opt| {
             if self.cfg.chewing_tsf.default_full_space {
@@ -1729,7 +1807,7 @@ impl ChewingTextService {
         let cfg = &self.cfg.chewing_tsf;
         self.kbtype = KeyboardLayoutCompat::try_from(cfg.keyboard_layout as u8)
             .unwrap_or(KeyboardLayoutCompat::Default);
-        self.chewing_editor = Self::build_editor_from_cfg(cfg)?;
+        self.chewing_editor = Self::build_editor_from_cfg(cfg, self.partial_syllable_match)?;
         let _ = self.update_lang_buttons();
         let dual_track_keybind_active =
             cfg.dual_input_mode && cfg.dual_track_switch_with_keybind;
