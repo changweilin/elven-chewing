@@ -66,3 +66,30 @@ pub type CheckUpdateReply = ();
 impl CheckUpdate {
     pub const METHOD: &str = "im.chewing.ui.CheckUpdate";
 }
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct ShowDualPreview {
+    pub position: Position,
+    pub chinese: String,
+    pub english: String,
+    /// 0 = Chinese active, 1 = English active
+    pub active: u8,
+    pub font_family: String,
+    pub font_size: f32,
+    pub fg_color: String,
+    pub bg_color: String,
+    pub highlight_fg_color: String,
+    pub highlight_bg_color: String,
+    pub border_color: String,
+}
+pub type ShowDualPreviewReply = ();
+impl ShowDualPreview {
+    pub const METHOD: &str = "im.chewing.ui.ShowDualPreview";
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct HideDualPreview;
+pub type HideDualPreviewReply = ();
+impl HideDualPreview {
+    pub const METHOD: &str = "im.chewing.ui.HideDualPreview";
+}

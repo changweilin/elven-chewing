@@ -18,7 +18,7 @@ use windows::core::{
 };
 
 use crate::{
-    logging::{self, WinDbg},
+    logging::{self, DiagFile, WinDbg},
     text_service::TextService,
 };
 
@@ -38,18 +38,38 @@ extern "system" fn DllMain(
                 unsafe {
                     let _ = AttachConsole(ATTACH_PARENT_PROCESS);
                 }
-                logforth::starter_log::builder()
-                    .dispatch(|d| {
-                        d.filter(if cfg!(debug_assertions) {
-                            LevelFilter::MoreSevereEqual(Level::Debug)
-                        } else {
-                            LevelFilter::MoreSevereEqual(Level::Info)
-                        })
-                        .append(WinDbg::default())
-                        .append(logforth::append::Stderr::default())
-                    })
-                    .apply();
             }
+            // Always-on logging to TEMP\chewing_tip_diag.log + OutputDebugString.
+            // Temporary diagnostic for activation failure debugging.
+            logforth::starter_log::builder()
+                .dispatch(|d| {
+                    let mut d = d
+                        .filter(LevelFilter::MoreSevereEqual(Level::Debug))
+                        .append(WinDbg::default());
+                    if let Some(diag) = DiagFile::try_new() {
+                        d = d.append(diag);
+                    }
+                    if logging::is_debugger_present() {
+                        d = d.append(logforth::append::Stderr::default());
+                    }
+                    d
+                })
+                .apply();
+            // Install a global panic hook so chewing_tip.dll panics get logged.
+            std::panic::set_hook(Box::new(|info| {
+                let loc = info
+                    .location()
+                    .map(|l| format!("{}:{}", l.file(), l.line()))
+                    .unwrap_or_else(|| "<unknown>".to_string());
+                let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+                    (*s).to_string()
+                } else if let Some(s) = info.payload().downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "<non-string panic>".to_string()
+                };
+                log::error!("PANIC at {loc}: {payload}");
+            }));
             log::info!("chewing_tip.dll loaded");
         }
     }

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/user/.claude/skills/**)",
+      "Read(//c/Users/user/.claude/**)",
+      "Bash(cargo check *)",
+      "PowerShell(cargo check *)",
+      "PowerShell(Get-Command *)",
+      "Bash(grep -rn \"26\\\\\\\\.4\\\\\\\\.[12]\" \"C:/Users/user/Documents/app/elven-chewing\" --include=\"*.toml\" --include=\"*.json\" --include=\"*.wxs\")"
+    ]
+  }
+}

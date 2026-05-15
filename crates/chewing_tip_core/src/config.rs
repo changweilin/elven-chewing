@@ -84,6 +84,10 @@ pub struct ChewingTsfConfig {
     pub update_info_url: String,
     pub last_update_check_time: u64,
     pub modified_timestamp: u64,
+    #[serde(default)]
+    pub dual_input_mode: bool,
+    #[serde(default)]
+    pub dual_input_initial_track: i32,
 }
 
 impl Default for ChewingTsfConfig {
@@ -144,6 +148,8 @@ impl Default for ChewingTsfConfig {
             update_info_url: "".to_string(),
             last_update_check_time: 0,
             modified_timestamp: 0,
+            dual_input_mode: false,
+            dual_input_initial_track: 0,
         }
     }
 }
@@ -313,6 +319,12 @@ impl Config {
                 .flat_map(|value| KeybindValue::from_str(&value))
                 .collect();
         }
+        if let Ok(value) = reg_get_bool(&key, "DualInputMode") {
+            cfg.dual_input_mode = value;
+        }
+        if let Ok(value) = reg_get_i32(&key, "DualInputInitialTrack") {
+            cfg.dual_input_initial_track = value;
+        }
 
         Ok(Config {
             chewing_tsf: cfg,
@@ -434,6 +446,12 @@ impl Config {
             chewing_tsf.upper_case_with_shift,
         );
         let _ = reg_set_bool(&key, "EnableAutoLearn", chewing_tsf.enable_auto_learn);
+        let _ = reg_set_bool(&key, "DualInputMode", chewing_tsf.dual_input_mode);
+        let _ = reg_set_i32(
+            &key,
+            "DualInputInitialTrack",
+            chewing_tsf.dual_input_initial_track,
+        );
         let _ = key.set_string(
             "AutoCheckUpdateChannel",
             &chewing_tsf.auto_check_update_channel,

@@ -2,7 +2,9 @@
 // Copyright (c) 2026 Kan-Ru Chen
 
 mod candidate_list;
+mod dual_preview;
 mod notification;
 
 pub(super) use candidate_list::{CandidateList, FilterKeyResult};
+pub(super) use dual_preview::DualPreview;
 pub(super) use notification::Notification;

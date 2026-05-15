@@ -5,7 +5,10 @@ use std::{
 };
 
 use chewing_tip_core::ipc::{
-    messages::{CheckUpdate, HideCandidateList, ShowCandidateList, ShowNotification, Stop},
+    messages::{
+        CheckUpdate, HideCandidateList, HideDualPreview, ShowCandidateList, ShowDualPreview,
+        ShowNotification, Stop,
+    },
     varlink::MethodCall,
 };
 use exn::{Result, ResultExt};
@@ -53,6 +56,8 @@ fn run_ipc_loop(pipe: PipeStream<Bytes, Bytes>, mh: MainLoopHandle) {
                     ShowNotification::METHOD
                     | ShowCandidateList::METHOD
                     | HideCandidateList::METHOD
+                    | ShowDualPreview::METHOD
+                    | HideDualPreview::METHOD
                     | Stop::METHOD => {
                         if let Err(error) = mh.send(call) {
                             error!("Failed to dispatch message: {error:?}");

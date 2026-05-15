@@ -5,7 +5,10 @@ use std::{
 };
 
 use chewing_tip_core::ipc::{
-    messages::{HideCandidateList, ShowCandidateList, ShowNotification, Stop},
+    messages::{
+        HideCandidateList, HideDualPreview, ShowCandidateList, ShowDualPreview, ShowNotification,
+        Stop,
+    },
     varlink::MethodCall,
 };
 use exn::{Result, ResultExt};
@@ -26,6 +29,7 @@ use crate::{
     ui::{UiError, gfx::color_s},
     ui_elements::{
         candidate_list::{CandidateList, CandidateListModel},
+        dual_preview::{DualPreview, DualPreviewModel},
         notification::{Notification, NotificationModel},
     },
 };
@@ -40,6 +44,7 @@ pub(crate) struct MainLoop {
 
     candidate_list: Rc<CandidateList>,
     notification: Rc<Notification>,
+    dual_preview: Rc<DualPreview>,
 }
 
 impl MainLoop {
@@ -53,6 +58,7 @@ impl MainLoop {
         let hinst = unsafe { GetModuleHandleW(None).unwrap_or_default() };
         let _ = Notification::window_register_class(hinst.into());
         let _ = CandidateList::window_register_class(hinst.into());
+        let _ = DualPreview::window_register_class(hinst.into());
 
         unsafe {
             let wc = WNDCLASSEXW {
@@ -86,6 +92,7 @@ impl MainLoop {
 
         let notification = Notification::new().expect("failed to create notification window");
         let candidate_list = CandidateList::new().expect("failed to create candidate list window");
+        let dual_preview = DualPreview::new().expect("failed to create dual preview window");
 
         let (sender, receiver) = sync_channel(130);
         MainLoop {
@@ -93,6 +100,7 @@ impl MainLoop {
             sender,
             notification,
             candidate_list,
+            dual_preview,
         }
     }
     pub(crate) fn get_handle(&self) -> MainLoopHandle {
@@ -219,6 +227,30 @@ impl MainLoop {
                 let _params: HideCandidateList =
                     serde_json::from_value(cmd.parameters).or_raise(err)?;
                 self.candidate_list.hide();
+            }
+            ShowDualPreview::METHOD => {
+                let params: ShowDualPreview =
+                    serde_json::from_value(cmd.parameters).or_raise(err)?;
+                self.dual_preview.set_model(DualPreviewModel {
+                    chinese: HSTRING::from(params.chinese),
+                    english: HSTRING::from(params.english),
+                    active: params.active,
+                    font_family: HSTRING::from(params.font_family),
+                    font_size: params.font_size,
+                    fg_color: color_s(&params.fg_color),
+                    bg_color: color_s(&params.bg_color),
+                    highlight_fg_color: color_s(&params.highlight_fg_color),
+                    highlight_bg_color: color_s(&params.highlight_bg_color),
+                    border_color: color_s(&params.border_color),
+                });
+                self.dual_preview
+                    .set_position(params.position.x, params.position.y);
+                self.dual_preview.show();
+            }
+            HideDualPreview::METHOD => {
+                let _params: HideDualPreview =
+                    serde_json::from_value(cmd.parameters).or_raise(err)?;
+                self.dual_preview.hide();
             }
             _ => {
                 warn!("Unknown method: {cmd:?}");

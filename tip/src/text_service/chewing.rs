@@ -19,12 +19,16 @@ use chewing::editor::{
     UserPhraseAddDirection,
 };
 use chewing::input::keycode::Keycode;
-use chewing::input::keysym::{Keysym, SYM_CAPSLOCK, SYM_LEFTSHIFT, SYM_RIGHTSHIFT, SYM_SPACE};
+use chewing::input::keysym::{
+    Keysym, SYM_BACKSPACE, SYM_CAPSLOCK, SYM_LEFTSHIFT, SYM_RETURN, SYM_RIGHTSHIFT, SYM_SPACE,
+};
 use chewing::input::{KeyState, KeyboardEvent, keycode, keysym};
 use chewing::zhuyin::Syllable;
 use chewing_tip_core::config::{ChewingTsfConfig, Config};
 use chewing_tip_core::ipc::client::ChewingIpcClient;
-use chewing_tip_core::ipc::messages::{CheckUpdate, Position, ShowCandidateList, ShowNotification};
+use chewing_tip_core::ipc::messages::{
+    CheckUpdate, Position, ShowCandidateList, ShowDualPreview, ShowNotification,
+};
 use chewing_tip_core::ipc::varlink::MethodCall;
 use chewing_tip_core::shell::{open_url, program_dir, user_dir};
 use exn_anyhow::into_anyhow;
@@ -68,7 +72,7 @@ use super::lang_bar::LangBarButton;
 use super::menu::Menu;
 use super::resources::*;
 use super::theme::{ThemeDetector, WindowsTheme};
-use super::ui_elements::{CandidateList, FilterKeyResult, Notification};
+use super::ui_elements::{CandidateList, DualPreview, FilterKeyResult, Notification};
 
 const GUID_MODE_BUTTON: GUID = GUID::from_u128(0xB59D51B9_B832_40D2_9A8D_56959372DDC7);
 const GUID_SHAPE_TYPE_BUTTON: GUID = GUID::from_u128(0x5325DBF5_5FBE_467B_ADF0_2395BE9DD2BB);
@@ -100,6 +104,51 @@ impl ShiftKeyState {
         };
         *self = ShiftKeyState::Up;
         duration
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum DualTrack {
+    Chinese,
+    English,
+}
+
+/// Dual-input mode runtime state: tracks the user's raw ASCII keystrokes
+/// in parallel with chewing's bopomofo preedit, plus which track is "active"
+/// (i.e. what gets committed and shown inline).
+#[derive(Debug)]
+pub(super) struct DualState {
+    pub(super) active: DualTrack,
+    pub(super) raw_english: String,
+    pub(super) last_committed: DualTrack,
+}
+
+impl DualState {
+    fn new(initial: DualTrack) -> Self {
+        DualState {
+            active: initial,
+            raw_english: String::new(),
+            last_committed: initial,
+        }
+    }
+    fn toggle(&mut self) {
+        self.active = match self.active {
+            DualTrack::Chinese => DualTrack::English,
+            DualTrack::English => DualTrack::Chinese,
+        };
+    }
+    fn reset_buffer(&mut self) {
+        self.raw_english.clear();
+        // active resets to last_committed on new session
+        self.active = self.last_committed;
+    }
+}
+
+fn dual_track_from_config(value: i32) -> DualTrack {
+    if value == 1 {
+        DualTrack::English
+    } else {
+        DualTrack::Chinese
     }
 }
 
@@ -176,6 +225,8 @@ pub(super) struct ChewingTextService {
     candidate_list: Option<ComObject<CandidateList>>,
     composition: Rc<RefCell<Option<ITfComposition>>>,
     pending_edit: Weak<RefCell<CompositionString>>,
+    dual_state: Option<DualState>,
+    dual_preview: DualPreview,
 }
 
 impl ChewingTextService {
@@ -269,6 +320,14 @@ impl ChewingTextService {
 
         debug!("trying to connect to a named pipe");
         let cth_client = ChewingIpcClient::connect_with_retry().map_err(into_anyhow)?;
+        let dual_preview = DualPreview::new(cth_client.clone());
+        let dual_state = if cfg.chewing_tsf.dual_input_mode {
+            Some(DualState::new(dual_track_from_config(
+                cfg.chewing_tsf.dual_input_initial_track,
+            )))
+        } else {
+            None
+        };
 
         let mut cts = ChewingTextService {
             thread_mgr,
@@ -295,6 +354,8 @@ impl ChewingTextService {
             composition: Default::default(),
             pending_edit: Weak::new(),
             pending_lang_mode_change: Cell::new(false),
+            dual_state,
+            dual_preview,
         };
 
         if let Err(error) = cts.init_openclose(tid) {
@@ -346,6 +407,8 @@ impl ChewingTextService {
         }
         self.hide_candidates();
         self.hide_message();
+        // 雙排模式: focus 切走立即收掉浮動預覽 (TSF 終止是 async,這裡先 sync 隱藏)
+        let _ = self.dual_hide_preview();
         Ok(())
     }
 
@@ -395,10 +458,10 @@ impl ChewingTextService {
             return Ok(false);
         }
         //
-        // Step 2.1 handle switch lang with Shift
+        // Step 2.1 handle switch lang with Shift (or dual track toggle)
         //
         if (evt.ksym == SYM_LEFTSHIFT || evt.ksym == SYM_RIGHTSHIFT)
-            && self.cfg.chewing_tsf.switch_lang_with_shift
+            && (self.cfg.chewing_tsf.switch_lang_with_shift || self.dual_state.is_some())
         {
             return Ok(true);
         }
@@ -518,7 +581,7 @@ impl ChewingTextService {
         debug!(evt:?; "on_keydown");
 
         if (evt.ksym == SYM_LEFTSHIFT || evt.ksym == SYM_RIGHTSHIFT)
-            && self.cfg.chewing_tsf.switch_lang_with_shift
+            && (self.cfg.chewing_tsf.switch_lang_with_shift || self.dual_state.is_some())
             && matches!(self.shift_key_state, ShiftKeyState::Up)
         {
             debug!("shift_key_state = Down");
@@ -590,6 +653,10 @@ impl ChewingTextService {
             } else {
                 evt.ksym
             };
+            // 雙排模式: 在 chewing 選字模式之外才把鍵入餵英文軌
+            if self.dual_state.is_some() && !self.chewing_editor.is_selecting() {
+                self.dual_feed_ascii(evt.ksym.to_unicode());
+            }
             // HACK: convert sel_keys key to number key
             if self.chewing_editor.is_selecting() {
                 evt = self.map_sel_key(evt);
@@ -608,6 +675,10 @@ impl ChewingTextService {
                 self.chewing_editor.process_keyevent(evt);
             }
         } else {
+            // 雙排模式: Backspace 同時砍英文軌
+            if evt.ksym == SYM_BACKSPACE && self.dual_state.is_some() {
+                self.dual_pop_ascii();
+            }
             let mut key_handled = false;
             if self.cfg.chewing_tsf.cursor_cand_list
                 && let Some(candidate_list) = &self.candidate_list
@@ -684,6 +755,22 @@ impl ChewingTextService {
         let last_behavior = self.chewing_editor.last_key_behavior();
 
         if last_behavior == EditorKeyBehavior::Ignore {
+            // 雙排模式 + English 軌道: 即便 chewing 因注音 buffer 不合法而忽略 Enter,
+            // 也要送出 raw_english,避免英文軌的內容被吞掉。
+            if evt.ksym == SYM_RETURN
+                && let Some(ds) = self.dual_state.as_ref()
+                && ds.active == DualTrack::English
+                && !ds.raw_english.is_empty()
+            {
+                let text = ds.raw_english.clone();
+                self.chewing_editor.clear_syllable_editor();
+                self.insert_text(context, &text)?;
+                self.dual_on_commit();
+                self.update_preedit(context, String::new())?;
+                let _ = self.dual_hide_preview();
+                debug!(text; "dual english commit on ignored enter");
+                return Ok(true);
+            }
             debug!("early return - chewing ignored key");
             return Ok(false);
         }
@@ -692,13 +779,20 @@ impl ChewingTextService {
         if !self.is_composing()
             && (last_behavior == EditorKeyBehavior::Commit || text_action.is_some())
         {
-            let text = self.chewing_editor.display_commit().to_owned();
+            let chinese_text = self.chewing_editor.display_commit().to_owned();
             self.chewing_editor.ack();
+            // 雙排模式: 依 active 軌道決定送出哪一串
+            let text = match self.dual_state.as_ref() {
+                Some(ds) if ds.active == DualTrack::English => ds.raw_english.clone(),
+                _ => chinese_text,
+            };
             debug!(text; "commit string");
             self.insert_text(context, &text)?;
             if let Some(param) = text_action {
                 self.insert_text(context, &param)?;
             }
+            self.dual_on_commit();
+            let _ = self.dual_hide_preview();
             debug!("commit string ok");
             return Ok(true);
         }
@@ -708,17 +802,27 @@ impl ChewingTextService {
         debug!("updated candidates");
 
         let commit = if last_behavior == EditorKeyBehavior::Commit {
-            let mut commit = self.chewing_editor.display_commit().to_owned();
+            let chinese_commit = self.chewing_editor.display_commit().to_owned();
             self.chewing_editor.ack();
+            let mut commit = match self.dual_state.as_ref() {
+                Some(ds) if ds.active == DualTrack::English => ds.raw_english.clone(),
+                _ => chinese_commit,
+            };
             if let Some(param) = text_action {
                 commit.push_str(&param);
             }
+            // 雙排 commit 完成 → 記錄 last_committed + 重置 buffer
+            self.dual_on_commit();
             commit
         } else {
             String::new()
         };
 
         self.update_preedit(context, commit)?;
+        // 雙排模式: 每次按鍵後更新浮動預覽 (兩排內容隨 chewing 與 english buffer 變化)
+        if self.dual_state.is_some() {
+            self.dual_send_preview(context)?;
+        }
 
         if !self.chewing_editor.notification().is_empty() {
             let msg = HSTRING::from(self.chewing_editor.notification());
@@ -750,12 +854,15 @@ impl ChewingTextService {
 
         debug!(last_is_shift, last_is_capslock; "");
 
-        if last_is_shift
+        let short_shift_press = last_is_shift
             && self.shift_key_state.release().is_some_and(|duration| {
                 duration < Duration::from_millis(self.cfg.chewing_tsf.shift_key_sensitivity as u64)
-            })
-            && self.cfg.chewing_tsf.switch_lang_with_shift
-        {
+            });
+
+        if short_shift_press && self.dual_state.is_some() {
+            // 雙排模式接管 Shift: 切換 active 軌道,bypass mode toggle
+            self.dual_toggle_active(context)?;
+        } else if short_shift_press && self.cfg.chewing_tsf.switch_lang_with_shift {
             // TODO: simplify this
             if self.cfg.chewing_tsf.enable_caps_lock {
                 // Locked by CapsLock
@@ -854,6 +961,11 @@ impl ChewingTextService {
         editor.clear_composition_editor();
         self.pending_edit = Weak::new();
         self.composition.replace(None);
+        // 雙排模式: composition 結束時清 buffer (保留 last_committed)
+        if let Some(ds) = self.dual_state.as_mut() {
+            ds.reset_buffer();
+        }
+        let _ = self.dual_hide_preview();
         Ok(())
     }
 
@@ -883,8 +995,14 @@ impl ChewingTextService {
             self.sync_lang_mode(false)?;
             if self.is_composing() && self.lang_mode.get().is_disabled() {
                 self.chewing_editor.commit()?;
-                let commit = self.chewing_editor.display_commit().to_owned();
+                let chinese_commit = self.chewing_editor.display_commit().to_owned();
                 self.chewing_editor.ack();
+                // 雙排模式: active=English 時改送 raw_english
+                let commit = match self.dual_state.as_ref() {
+                    Some(ds) if ds.active == DualTrack::English => ds.raw_english.clone(),
+                    _ => chinese_commit,
+                };
+                self.dual_on_commit();
                 debug!(commit; "commit string");
                 unsafe {
                     let doc_mgr = self
@@ -1013,6 +1131,15 @@ impl ChewingTextService {
         if need_push_bopomofo {
             segments.push((0, bopomofo_len));
             composition_buf.push_str(&bopomofo);
+        }
+
+        // 雙排模式: active=English 時把 inline preedit 換成 raw_english buffer
+        if let Some(ds) = self.dual_state.as_ref()
+            && ds.active == DualTrack::English
+        {
+            composition_buf = ds.raw_english.clone();
+            let len = composition_buf.chars().count();
+            segments = if len > 0 { vec![(0, len)] } else { vec![] };
         }
 
         // has something in composition buffer
@@ -1148,6 +1275,111 @@ impl ChewingTextService {
     fn hide_message(&mut self) {
         if let Some(notification) = self.notification.take() {
             notification.end_ui_element();
+        }
+    }
+
+    /// 雙排模式: 餵入一個 ASCII 字元到英文軌
+    fn dual_feed_ascii(&mut self, c: char) {
+        if let Some(ds) = self.dual_state.as_mut()
+            && c.is_ascii()
+            && !c.is_ascii_control()
+        {
+            ds.raw_english.push(c);
+        }
+    }
+
+    /// 雙排模式: 從英文軌移除最後一個字元 (Backspace)
+    fn dual_pop_ascii(&mut self) {
+        if let Some(ds) = self.dual_state.as_mut() {
+            ds.raw_english.pop();
+        }
+    }
+
+    /// 雙排模式: 切換 active 軌道 + 同步更新 inline composition 與浮動預覽
+    fn dual_toggle_active(&mut self, context: &ITfContext) -> Result<()> {
+        if self.dual_state.is_none() {
+            return Ok(());
+        }
+        if let Some(ds) = self.dual_state.as_mut() {
+            ds.toggle();
+        }
+        // 重畫 inline composition (套用新 active track 內容)
+        self.update_preedit(context, String::new())?;
+        // 更新浮動預覽 highlight
+        self.dual_send_preview(context)?;
+        Ok(())
+    }
+
+    /// 雙排模式: 推送 ShowDualPreview IPC 訊息
+    fn dual_send_preview(&mut self, context: &ITfContext) -> Result<()> {
+        // 先把 dual_state 內容拷出到 owned 值,避免後續借用衝突
+        let (english, active) = match self.dual_state.as_ref() {
+            Some(ds) => (
+                ds.raw_english.clone(),
+                match ds.active {
+                    DualTrack::Chinese => 0u8,
+                    DualTrack::English => 1u8,
+                },
+            ),
+            None => return Ok(()),
+        };
+        // chinese track 預覽: 合併 chewing intervals + 注音 buffer
+        let mut chinese = String::new();
+        for it in self.chewing_editor.intervals() {
+            chinese.push_str(&it.text);
+        }
+        let bopomofo = self.chewing_editor.syllable_buffer_display();
+        if !bopomofo.is_empty() {
+            chinese.push_str(&bopomofo);
+        }
+        if self.output_simp_chinese {
+            chinese = zhconv(&chinese, Variant::ZhHans);
+        }
+        if chinese.is_empty() && english.is_empty() {
+            return self.dual_hide_preview();
+        }
+        let rect = self.get_selection_rect(context).unwrap_or_default();
+        // 浮動預覽放游標上方 (rect.top - 預設高度估計值),避免跟 candidate list 重疊
+        // 視窗 WM_WINDOWPOSCHANGING 會用 clamp_point_to_monitor 確保不出螢幕
+        let estimated_height = (self.cfg.chewing_tsf.font_size as i32) * 3 + 28;
+        let call = ShowDualPreview {
+            position: Position {
+                x: rect.left,
+                y: rect.top - estimated_height,
+            },
+            chinese,
+            english,
+            active,
+            font_family: self.cfg.chewing_tsf.font_family.clone(),
+            font_size: self.cfg.chewing_tsf.font_size as f32,
+            fg_color: self.cfg.chewing_tsf.font_fg_color.clone(),
+            bg_color: self.cfg.chewing_tsf.font_bg_color.clone(),
+            highlight_fg_color: self.cfg.chewing_tsf.font_highlight_fg_color.clone(),
+            highlight_bg_color: self.cfg.chewing_tsf.font_highlight_bg_color.clone(),
+            border_color: self.cfg.chewing_tsf.cand_list_border_color.clone(),
+        };
+        if let Err(error) = self.dual_preview.show(&call) {
+            error!("dual preview show failed: {error:?}");
+        }
+        Ok(())
+    }
+
+    /// 雙排模式: 隱藏浮動預覽
+    fn dual_hide_preview(&mut self) -> Result<()> {
+        if self.dual_state.is_none() {
+            return Ok(());
+        }
+        if let Err(error) = self.dual_preview.hide() {
+            error!("dual preview hide failed: {error:?}");
+        }
+        Ok(())
+    }
+
+    /// 雙排模式: composition 結束時呼叫,記錄 last_committed + 清 raw_english
+    fn dual_on_commit(&mut self) {
+        if let Some(ds) = self.dual_state.as_mut() {
+            ds.last_committed = ds.active;
+            ds.reset_buffer();
         }
     }
 
@@ -1362,7 +1594,12 @@ impl ChewingTextService {
 
     fn is_composing(&self) -> bool {
         // when candidate window is shown we are composing even without a composition
-        self.composition.borrow().is_some() || self.candidate_list.is_some()
+        self.composition.borrow().is_some()
+            || self.candidate_list.is_some()
+            || self
+                .dual_state
+                .as_ref()
+                .is_some_and(|ds| ds.active == DualTrack::English && !ds.raw_english.is_empty())
     }
 
     fn init_chewing_context(&mut self) -> Result<()> {
