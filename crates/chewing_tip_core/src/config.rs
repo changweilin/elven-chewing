@@ -156,6 +156,11 @@ impl Default for ChewingTsfConfig {
                     action: "toggle_dual_track".to_string(),
                     param: "".to_string(),
                 },
+                KeybindValue {
+                    key: "Ctrl+`".to_string(),
+                    action: "reconvert_last_commit".to_string(),
+                    param: "".to_string(),
+                },
             ],
             auto_check_update_channel: "stable".to_string(),
             update_info_url: "".to_string(),

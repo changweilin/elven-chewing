@@ -33,6 +33,9 @@ mod flags {
                 optional --release
                 /// Build nightly artifact
                 optional --nightly
+                /// Allow unsigned chewing_tip_host (dev only — bakes a
+                /// signature-attestation bypass into the DLL).
+                optional --allow-unsigned-host
             }
             /// Download prebuilt components and verify the signatures.
             cmd download-components {
@@ -73,6 +76,7 @@ mod flags {
         pub target: Option<Target>,
         pub release: bool,
         pub nightly: bool,
+        pub allow_unsigned_host: bool,
     }
 
     #[derive(Debug)]

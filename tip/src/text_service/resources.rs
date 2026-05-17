@@ -28,6 +28,7 @@ pub(super) const ID_HASHED: u32 = 40016;
 pub(super) const ID_CONFIG: u32 = 40017;
 pub(super) const ID_OUTPUT_SIMP_CHINESE: u32 = 40027;
 pub(super) const ID_PARTIAL_SYLLABLE_MATCH: u32 = 40028;
+pub(super) const ID_DUAL_INPUT_MODE: u32 = 40029;
 pub(super) const ID_ABOUT: u32 = 40005;
 pub(super) const ID_CHECK_NEW_VER: u32 = 40006;
 pub(super) const ID_WEBSITE: u32 = 40007;

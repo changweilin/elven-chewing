@@ -39,6 +39,11 @@ pub(crate) fn build_installer(flags: BuildInstaller) -> Result<()> {
     } else {
         vec![]
     };
+    let unsigned_host: &[&str] = if flags.allow_unsigned_host {
+        &["--features", "chewing_tip_core/dev-skip-attest"]
+    } else {
+        &[]
+    };
 
     let x86_64_target = match flags.target {
         Some(Target::Gnu) => "x86_64-pc-windows-gnu",
@@ -78,24 +83,24 @@ pub(crate) fn build_installer(flags: BuildInstaller) -> Result<()> {
         .run()?;
         cmd!(
             sh,
-            "cargo build -p chewing_tip {release...} --target {x86_64_target}"
+            "cargo build -p chewing_tip {release...} {unsigned_host...} --target {x86_64_target}"
         )
         .run()?;
         cmd!(
             sh,
-            "cargo build -p chewing_tip_host {release...} --target {x86_64_target}"
+            "cargo build -p chewing_tip_host {release...} {unsigned_host...} --target {x86_64_target}"
         )
         .run()?;
         cmd!(
             sh,
-            "cargo build -p tsfreg {release...} {nightly...} --target {x86_64_target}"
+            "cargo build -p tsfreg {release...} {nightly...} {unsigned_host...} --target {x86_64_target}"
         )
         .run()?;
     }
     {
         cmd!(
             sh,
-            "cargo build -p chewing_tip {release...} --target {i686_target}"
+            "cargo build -p chewing_tip {release...} {unsigned_host...} --target {i686_target}"
         )
         .run()?;
     }

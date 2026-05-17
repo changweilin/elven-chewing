@@ -8,7 +8,7 @@ use std::ptr;
 use std::rc::Rc;
 
 use log::{debug, error};
-use windows::Win32::Foundation::{FALSE, POINT, RECT};
+use windows::Win32::Foundation::{E_FAIL, FALSE, POINT, RECT};
 use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::HiDpi::LogicalToPhysicalPointForPerMonitorDPI;
 use windows::Win32::UI::TextServices::{
@@ -79,6 +79,73 @@ impl ITfEditSession_Impl for InsertText_Impl {
             range.Collapse(ec, TF_ANCHOR_END)?;
             set_selection(&self.context, ec, range, TF_AE_END)?;
         }
+        Ok(())
+    }
+}
+
+/// Edit session that shifts the current caret backwards `backwards_chars`
+/// characters and replaces that range with `text`. Used by the
+/// "reconvert last commit" feature to swap an already-committed string
+/// between English raw keystrokes and Chinese bopomofo output.
+#[implement(ITfEditSession)]
+pub(super) struct ReplaceBackwards {
+    context: ITfContext,
+    backwards_chars: i32,
+    text: HSTRING,
+    success: Cell<bool>,
+}
+
+impl ReplaceBackwards {
+    pub(super) fn new(context: ITfContext, backwards_chars: i32, text: HSTRING) -> Self {
+        Self {
+            context,
+            backwards_chars,
+            text,
+            success: Cell::new(false),
+        }
+    }
+    pub(super) fn success(&self) -> bool {
+        self.success.get()
+    }
+}
+
+impl ITfEditSession_Impl for ReplaceBackwards_Impl {
+    fn DoEditSession(&self, ec: u32) -> Result<()> {
+        if self.backwards_chars <= 0 {
+            return Err(E_FAIL.into());
+        }
+        let mut selection = [TF_SELECTION::default(); 1];
+        let mut count: u32 = 0;
+        let result = (|| unsafe {
+            self.context
+                .GetSelection(ec, TF_DEFAULT_SELECTION, &mut selection, &mut count)?;
+            if count == 0 {
+                return Err(E_FAIL.into());
+            }
+            let Some(sel_range) = selection[0].range.deref() else {
+                return Err(E_FAIL.into());
+            };
+            // Refuse if user has a non-empty highlight selection.
+            let empty = sel_range.IsEmpty(ec)?;
+            if !empty.as_bool() {
+                return Err(E_FAIL.into());
+            }
+            let range = sel_range.Clone()?;
+            range.Collapse(ec, TF_ANCHOR_END)?;
+            let mut moved = 0i32;
+            range.ShiftStart(ec, -self.backwards_chars, &mut moved, ptr::null())?;
+            if moved != -self.backwards_chars {
+                return Err(E_FAIL.into());
+            }
+            range.SetText(ec, 0, &self.text)?;
+            range.Collapse(ec, TF_ANCHOR_END)?;
+            set_selection(&self.context, ec, range, TF_AE_END)?;
+            self.success.set(true);
+            Ok::<(), windows_core::Error>(())
+        })();
+        let [TF_SELECTION { range, .. }] = selection;
+        ManuallyDrop::into_inner(range);
+        result?;
         Ok(())
     }
 }

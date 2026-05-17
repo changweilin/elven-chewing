@@ -6,7 +6,23 @@
       "Bash(cargo check *)",
       "PowerShell(cargo check *)",
       "PowerShell(Get-Command *)",
-      "Bash(grep -rn \"26\\\\\\\\.4\\\\\\\\.[12]\" \"C:/Users/user/Documents/app/elven-chewing\" --include=\"*.toml\" --include=\"*.json\" --include=\"*.wxs\")"
+      "Bash(grep -rn \"26\\\\\\\\.4\\\\\\\\.[12]\" \"C:/Users/user/Documents/app/elven-chewing\" --include=\"*.toml\" --include=\"*.json\" --include=\"*.wxs\")",
+      "Bash(cargo test *)",
+      "Bash(rustup target *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(cargo xtask *)",
+      "PowerShell(Get-Item *)",
+      "PowerShell(Get-WmiObject *)",
+      "PowerShell(Get-Process *)",
+      "PowerShell(Get-WinUserLanguageList *)",
+      "PowerShell(Join-Path *)",
+      "Bash(cargo tree *)",
+      "Bash(cargo metadata *)",
+      "Bash(python -c \"import json,sys; m=json.load\\(sys.stdin\\); [print\\(p['name'],p['version'],p.get\\('source'\\),p.get\\('manifest_path'\\)\\) for p in m['packages'] if p['name']=='chewing']\")",
+      "Bash(cargo build *)",
+      "Bash(cargo xtask *)",
+      "Bash(explorer.exe *)",
+      "Bash(powershell *)"
     ]
   }
 }

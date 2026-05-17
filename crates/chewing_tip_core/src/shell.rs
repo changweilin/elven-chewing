@@ -3,7 +3,7 @@ use std::fmt::Display;
 use std::io::ErrorKind;
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::fs::MetadataExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use exn::{OptionExt, Result, ResultExt};
 use windows::Foundation::Uri;
@@ -11,7 +11,9 @@ use windows::System::Launcher;
 use windows::Win32::Storage::FileSystem::{
     FILE_ATTRIBUTE_HIDDEN, FILE_FLAGS_AND_ATTRIBUTES, SetFileAttributesW,
 };
-use windows::core::BSTR;
+use windows::Win32::UI::Shell::ShellExecuteW;
+use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+use windows::core::{BSTR, HSTRING, PCWSTR, w};
 
 pub fn user_dir() -> Result<PathBuf, ShellError> {
     let err = || ShellError("unable to determine user dir".to_string());
@@ -57,6 +59,23 @@ pub fn program_dir() -> Result<PathBuf, ShellError> {
 pub fn open_url(url: &str) {
     if let Ok(uri) = Uri::CreateUri(&url.into()) {
         let _ = Launcher::LaunchUriAsync(&uri);
+    }
+}
+
+/// Launch a local file via the Windows shell's default file association
+/// (e.g. `.msi` -> msiexec). Use for invoking installers; the user will see
+/// a UAC prompt and msiexec's own UI.
+pub fn launch_file(path: &Path) {
+    let wide: HSTRING = path.as_os_str().into();
+    unsafe {
+        ShellExecuteW(
+            None,
+            w!("open"),
+            PCWSTR(wide.as_ptr()),
+            None,
+            None,
+            SW_SHOWNORMAL,
+        );
     }
 }
 

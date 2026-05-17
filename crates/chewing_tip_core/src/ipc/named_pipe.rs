@@ -105,7 +105,7 @@ pub fn connect_and_attest(
 
     let peer_pid = pipe.server_process_id().or_raise(err)?;
     if let Err(error) = attest_server(peer_pid) {
-        if cfg!(debug_assertions) {
+        if cfg!(debug_assertions) || cfg!(feature = "dev-skip-attest") {
             error!("failed to validate signature: {error:?}");
         } else {
             bail!(error.raise(err()));

@@ -5,6 +5,7 @@ use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::mem;
+use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
@@ -30,7 +31,7 @@ use chewing_tip_core::ipc::messages::{
     CheckUpdate, Position, ShowCandidateList, ShowDualPreview, ShowNotification,
 };
 use chewing_tip_core::ipc::varlink::MethodCall;
-use chewing_tip_core::shell::{open_url, program_dir, user_dir};
+use chewing_tip_core::shell::{launch_file, open_url, program_dir, user_dir};
 use exn_anyhow::into_anyhow;
 use log::{debug, error, info};
 use serde_json::Value;
@@ -66,6 +67,7 @@ use super::GUID_INPUT_DISPLAY_ATTRIBUTE_1;
 use super::GUID_INPUT_DISPLAY_ATTRIBUTE_2;
 use super::display_attribute::register_display_attribute;
 use super::edit_session::InsertText;
+use super::edit_session::ReplaceBackwards;
 use super::edit_session::{EndComposition, SelectionRect, SetCompositionString};
 use super::key_event::SystemKeyboardEvent;
 use super::lang_bar::LangBarButton;
@@ -79,6 +81,18 @@ const GUID_SHAPE_TYPE_BUTTON: GUID = GUID::from_u128(0x5325DBF5_5FBE_467B_ADF0_2
 const GUID_SETTINGS_BUTTON: GUID = GUID::from_u128(0x4FAFA520_2104_407E_A532_9F1AAB7751CD);
 
 pub(crate) const CLSID_TEXT_SERVICE: GUID = GUID::from_u128(0x13F2EF08_575C_4D8C_88E0_F67BB8052B84);
+
+/// Absolute path of the MSI built by this very repo's `cargo xtask
+/// package-installer` step. The path is baked in at compile time from
+/// `CARGO_MANIFEST_DIR`, so it points to the developer's own checkout — the
+/// "安裝本地新版本" menu item is a developer convenience for installing the
+/// freshly-built MSI without leaving the editor.
+fn local_installer_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("dist")
+        .join("windows-chewing-tsf-unsigned.msi")
+}
 
 const SEL_KEYS: [&str; 6] = [
     "1234567890",
@@ -197,6 +211,20 @@ pub(super) struct CompositionString {
     pub(super) cursor: usize,
 }
 
+/// Snapshot of the most recent commit, used by the reconvert-last-commit
+/// keybinding to swap the committed text between English raw keystrokes and
+/// Chinese bopomofo output based on the *keys* originally pressed (not the
+/// committed text itself).
+#[derive(Debug, Clone)]
+struct LastCommitSnapshot {
+    /// Raw ASCII characters the user pressed to produce this commit.
+    keystrokes: String,
+    /// Text that was actually inserted into the document.
+    committed_text: String,
+    /// The chewing language mode at commit time.
+    mode: LanguageMode,
+}
+
 pub(super) struct ChewingTextService {
     thread_mgr: ITfThreadMgr,
     tid: u32,
@@ -228,6 +256,11 @@ pub(super) struct ChewingTextService {
     pending_edit: Weak<RefCell<CompositionString>>,
     dual_state: Option<DualState>,
     dual_preview: DualPreview,
+    /// ASCII keystrokes accumulated during the current composition session.
+    /// Cleared on commit (after snapshotting into `last_reconvert`) and on abort.
+    pending_keystrokes: String,
+    /// Most recent commit snapshot for the reconvert-last-commit keybinding.
+    last_reconvert: Option<LastCommitSnapshot>,
 }
 
 impl ChewingTextService {
@@ -254,6 +287,16 @@ impl ChewingTextService {
 
         let lang_bar_item_mgr: ITfLangBarItemMgr = thread_mgr.cast()?;
         info!("Detected theme info: {:?}", ThemeDetector::get_theme_info());
+
+        // Connect to chewing_tip_host BEFORE registering lang bar buttons.
+        // attest_server / connect_with_retry can bail (e.g. unsigned host in
+        // release builds without the dev-skip-attest feature). If that happens
+        // after AddItem, the buttons stay in the system lang bar as orphans
+        // showing the Chinese icon while the IME itself never activates —
+        // appearing to the user as "中文 mode shows but every keystroke types
+        // English". Failing here leaves the lang bar untouched.
+        debug!("trying to connect to a named pipe");
+        let cth_client = ChewingIpcClient::connect_with_retry().map_err(into_anyhow)?;
 
         // Create a small factory to reduce repetition when creating the langbar buttons.
         let popup_menu = menu.sub_menu(0);
@@ -318,9 +361,6 @@ impl ChewingTextService {
 
         // Initialize a temp editor, this will be replaced in init_chewing_context.
         let editor = Editor::chewing(None, None, DEFAULT_DICT_NAMES);
-
-        debug!("trying to connect to a named pipe");
-        let cth_client = ChewingIpcClient::connect_with_retry().map_err(into_anyhow)?;
         let dual_preview = DualPreview::new(cth_client.clone());
         let dual_state = if cfg.chewing_tsf.dual_input_mode {
             Some(DualState::new(dual_track_from_config(
@@ -358,6 +398,8 @@ impl ChewingTextService {
             pending_lang_mode_change: Cell::new(false),
             dual_state,
             dual_preview,
+            pending_keystrokes: String::new(),
+            last_reconvert: None,
         };
 
         if let Err(error) = cts.init_openclose(tid) {
@@ -608,6 +650,7 @@ impl ChewingTextService {
             self.chewing_editor.commit()?;
             self.chewing_editor.ack();
             self.insert_text(context, &text)?;
+            self.snapshot_last_commit(&text, false);
             self.dual_on_commit();
             self.update_preedit(context, String::new())?;
             let _ = self.dual_hide_preview();
@@ -630,6 +673,9 @@ impl ChewingTextService {
                 }
                 "toggle_hsu_keyboard" => {
                     self.toggle_hsu_keyboard(context)?;
+                }
+                "reconvert_last_commit" => {
+                    self.on_reconvert_last_commit(context)?;
                 }
                 "text" => {
                     if !self.chewing_editor.is_empty() {
@@ -686,6 +732,11 @@ impl ChewingTextService {
             if self.dual_state.is_some() && !self.chewing_editor.is_selecting() {
                 self.dual_feed_ascii(evt.ksym.to_unicode());
             }
+            // Reconvert tracking: accumulate the raw ASCII char so we can
+            // replay it under the opposite language mode later.
+            if !self.chewing_editor.is_selecting() {
+                self.track_keystroke(evt.ksym.to_unicode());
+            }
             // HACK: convert sel_keys key to number key
             if self.chewing_editor.is_selecting() {
                 evt = self.map_sel_key(evt);
@@ -707,6 +758,11 @@ impl ChewingTextService {
             // 雙排模式: Backspace 同時砍英文軌
             if evt.ksym == SYM_BACKSPACE && self.dual_state.is_some() {
                 self.dual_pop_ascii();
+            }
+            // Reconvert tracking: keep the keystroke buffer aligned with chewing
+            // on Backspace.
+            if evt.ksym == SYM_BACKSPACE {
+                self.pending_keystrokes.pop();
             }
             let mut key_handled = false;
             if self.cfg.chewing_tsf.cursor_cand_list
@@ -801,9 +857,10 @@ impl ChewingTextService {
             };
             debug!(text; "commit string");
             self.insert_text(context, &text)?;
-            if let Some(param) = text_action {
-                self.insert_text(context, &param)?;
+            if let Some(param) = text_action.as_deref() {
+                self.insert_text(context, param)?;
             }
+            self.snapshot_last_commit(&text, text_action.is_some());
             self.dual_on_commit();
             let _ = self.dual_hide_preview();
             debug!("commit string ok");
@@ -821,9 +878,10 @@ impl ChewingTextService {
                 Some(ds) if ds.active == DualTrack::English => ds.raw_english.clone(),
                 _ => chinese_commit,
             };
-            if let Some(param) = text_action {
-                commit.push_str(&param);
+            if let Some(param) = text_action.as_deref() {
+                commit.push_str(param);
             }
+            self.snapshot_last_commit(&commit, text_action.is_some());
             // 雙排 commit 完成 → 記錄 last_committed + 重置 buffer
             self.dual_on_commit();
             commit
@@ -1018,6 +1076,7 @@ impl ChewingTextService {
                     Some(ds) if ds.active == DualTrack::English => ds.raw_english.clone(),
                     _ => chinese_commit,
                 };
+                self.snapshot_last_commit(&commit, false);
                 self.dual_on_commit();
                 debug!(commit; "commit string");
                 unsafe {
@@ -1094,7 +1153,20 @@ impl ChewingTextService {
                         error!("unable to toggle partial syllable match: {error}");
                     }
                 }
-                ID_CHECK_NEW_VER => open_url(&self.cfg.chewing_tsf.update_info_url),
+                ID_DUAL_INPUT_MODE => {
+                    if let Err(error) = self.toggle_dual_input_mode() {
+                        error!("unable to toggle dual input mode: {error}");
+                    }
+                }
+                ID_CHECK_NEW_VER => {
+                    let msi = local_installer_path();
+                    if msi.exists() {
+                        info!("launching local installer: {}", msi.display());
+                        launch_file(&msi);
+                    } else {
+                        error!("local installer not found at {}", msi.display());
+                    }
+                }
                 ID_ABOUT => open_url("chewing-preferences://about"),
                 ID_WEBSITE => open_url("https://chewing.im/"),
                 ID_GROUP => open_url("https://groups.google.com/group/chewing-devel"),
@@ -1299,6 +1371,126 @@ impl ChewingTextService {
         }
     }
 
+    /// Reconvert tracking: record an ASCII printable char into
+    /// `pending_keystrokes` so we can replay it later.
+    fn track_keystroke(&mut self, c: char) {
+        if c.is_ascii() && !c.is_ascii_control() && c != '\0' {
+            self.pending_keystrokes.push(c);
+        }
+    }
+
+    /// Reconvert tracking: capture the current committed text + the keystrokes
+    /// that produced it. `had_text_action` skips the snapshot for `text:...`
+    /// keybind commits where the inserted glyphs do not correspond to any
+    /// keystrokes the user pressed.
+    fn snapshot_last_commit(&mut self, committed_text: &str, had_text_action: bool) {
+        if had_text_action {
+            self.pending_keystrokes.clear();
+            return;
+        }
+        let keystrokes = mem::take(&mut self.pending_keystrokes);
+        if committed_text.is_empty() || keystrokes.is_empty() {
+            return;
+        }
+        let mode = match self.lang_mode.get() {
+            TsfLangMode::Chinese | TsfLangMode::DisabledChinese => LanguageMode::Chinese,
+            TsfLangMode::English | TsfLangMode::DisabledEnglish => LanguageMode::English,
+        };
+        self.last_reconvert = Some(LastCommitSnapshot {
+            keystrokes,
+            committed_text: committed_text.to_owned(),
+            mode,
+        });
+    }
+
+    /// Handle the reconvert-last-commit keybinding (default: Ctrl+`).
+    /// Swap the most recently committed string between its English raw
+    /// keystrokes and the bopomofo composition those same keystrokes would
+    /// have produced. Toggling again reverses the swap.
+    fn on_reconvert_last_commit(&mut self, context: &ITfContext) -> Result<()> {
+        if self.is_composing() {
+            debug!("reconvert: skip - currently composing");
+            return Ok(());
+        }
+        let Some(last) = self.last_reconvert.take() else {
+            debug!("reconvert: skip - no recent commit");
+            return Ok(());
+        };
+        let replacement = match last.mode {
+            LanguageMode::English => self.simulate_chinese_from_keystrokes(&last.keystrokes)?,
+            LanguageMode::Chinese => last.keystrokes.clone(),
+        };
+        if replacement.is_empty() {
+            debug!("reconvert: replacement empty, restoring snapshot");
+            self.last_reconvert = Some(last);
+            return Ok(());
+        }
+        let backwards = last.committed_text.chars().count() as i32;
+        if backwards <= 0 {
+            self.last_reconvert = Some(last);
+            return Ok(());
+        }
+        let session_text: HSTRING = replacement.as_str().into();
+        let session =
+            ReplaceBackwards::new(context.clone(), backwards, session_text).into_object();
+        request_edit_session(
+            context,
+            self.tid,
+            session.as_interface(),
+            TF_ES_SYNC | TF_ES_READWRITE,
+        );
+        if !session.success() {
+            error!(
+                "reconvert: TSF range replace failed (target chars={}, app may not support it)",
+                backwards
+            );
+            self.last_reconvert = Some(last);
+            return Ok(());
+        }
+        let new_mode = match last.mode {
+            LanguageMode::English => LanguageMode::Chinese,
+            LanguageMode::Chinese => LanguageMode::English,
+        };
+        self.last_reconvert = Some(LastCommitSnapshot {
+            keystrokes: last.keystrokes,
+            committed_text: replacement,
+            mode: new_mode,
+        });
+        Ok(())
+    }
+
+    /// Replay `keystrokes` through the chewing engine in Chinese mode to get
+    /// the bopomofo-composed text. Requires `!self.is_composing()` so the
+    /// editor state is clean.
+    fn simulate_chinese_from_keystrokes(&mut self, keystrokes: &str) -> Result<String> {
+        let old_mode = self.chewing_editor.editor_options().language_mode;
+        self.chewing_editor
+            .set_editor_options(|opt| opt.language_mode = LanguageMode::Chinese);
+        self.chewing_editor.clear_syllable_editor();
+
+        for c in keystrokes.chars() {
+            if !c.is_ascii() || c.is_ascii_control() {
+                continue;
+            }
+            let evt = KeyboardEvent::builder()
+                .ksym(Keysym::from(c.to_ascii_lowercase()))
+                .build();
+            self.chewing_editor.process_keyevent(evt);
+        }
+        self.chewing_editor.commit()?;
+        let mut out = self.chewing_editor.display_commit().to_owned();
+        self.chewing_editor.ack();
+        self.chewing_editor.clear_syllable_editor();
+
+        if self.output_simp_chinese {
+            out = zhconv(&out, Variant::ZhHans);
+        }
+
+        self.chewing_editor
+            .set_editor_options(|opt| opt.language_mode = old_mode);
+        Ok(out)
+    }
+
     /// 雙排模式: 餵入一個 ASCII 字元到英文軌
     fn dual_feed_ascii(&mut self, c: char) {
         if let Some(ds) = self.dual_state.as_mut()
@@ -1482,6 +1674,31 @@ impl ChewingTextService {
             CheckMenuItem(self.popup_menu, ID_OUTPUT_SIMP_CHINESE, check_flag.0);
         }
         self.update_lang_buttons()?;
+        Ok(())
+    }
+
+    fn toggle_dual_input_mode(&mut self) -> Result<()> {
+        let new_value = !self.cfg.chewing_tsf.dual_input_mode;
+        debug!("toggle dual input mode: {}", new_value);
+        self.cfg.chewing_tsf.dual_input_mode = new_value;
+        if new_value {
+            // Turning ON: instantiate dual_state from the configured initial track.
+            self.dual_state = Some(DualState::new(dual_track_from_config(
+                self.cfg.chewing_tsf.dual_input_initial_track,
+            )));
+        } else {
+            // Turning OFF: hide any floating preview, drop the dual_state.
+            let _ = self.dual_hide_preview();
+            self.dual_state = None;
+        }
+        // Refresh keybindings filter (toggle_dual_track is hidden when dual is off).
+        self.apply_runtime_config()?;
+        // Persist the change so it survives restart and is visible to other instances.
+        self.cfg.save_reg();
+        let check_flag = if new_value { MF_CHECKED } else { MF_UNCHECKED };
+        unsafe {
+            CheckMenuItem(self.popup_menu, ID_DUAL_INPUT_MODE, check_flag.0);
+        }
         Ok(())
     }
 
@@ -1786,6 +2003,14 @@ impl ChewingTextService {
         unsafe {
             CheckMenuItem(self.popup_menu, ID_PARTIAL_SYLLABLE_MATCH, psm_flag.0);
         }
+        let dual_flag = if self.cfg.chewing_tsf.dual_input_mode {
+            MF_CHECKED
+        } else {
+            MF_UNCHECKED
+        };
+        unsafe {
+            CheckMenuItem(self.popup_menu, ID_DUAL_INPUT_MODE, dual_flag.0);
+        }
         self.chewing_editor.set_editor_options(|opt| {
             if self.cfg.chewing_tsf.default_full_space {
                 opt.character_form = CharacterForm::Fullwidth;
@@ -1854,9 +2079,10 @@ impl ChewingTextService {
             let _ = EnableMenuItem(
                 self.popup_menu,
                 ID_CHECK_NEW_VER,
-                match self.cfg.chewing_tsf.update_info_url.as_str() {
-                    "" => MF_GRAYED,
-                    _ => MF_ENABLED,
+                if local_installer_path().exists() {
+                    MF_ENABLED
+                } else {
+                    MF_GRAYED
                 },
             );
         }
