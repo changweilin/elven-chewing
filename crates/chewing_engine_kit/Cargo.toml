@@ -1,0 +1,17 @@
+[package]
+name = "chewing_engine_kit"
+version.workspace = true
+edition = "2024"
+description = "Portable libchewing engine adapter for headless tests and the web demo."
+
+[dependencies]
+chewing.workspace = true
+log.workspace = true
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[features]
+default = []
+serde = ["dep:serde"]

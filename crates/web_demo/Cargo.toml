@@ -1,0 +1,21 @@
+[package]
+name = "elven_chewing_web_demo"
+version.workspace = true
+edition = "2024"
+description = "wasm-bindgen demo of the chewing engine, served from a static page."
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+chewing.workspace = true
+chewing_engine_kit = { path = "../chewing_engine_kit", features = ["serde"] }
+serde.workspace = true
+serde_json.workspace = true
+wasm-bindgen = "0.2"
+zhconv = { version = "0.4.1", default-features = false, features = ["opencc"] }
+console_error_panic_hook = { version = "0.1", optional = true }
+
+[features]
+default = ["console_error_panic_hook"]

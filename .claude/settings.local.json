@@ -37,7 +37,20 @@
       "Read(//c/Program Files/Microsoft Visual Studio/2022/**)",
       "Read(//c/Program Files \\(x86\\)/Microsoft Visual Studio/**)",
       "Bash(\"C:/Program Files \\(x86\\)/Microsoft Visual Studio/Installer/vswhere.exe\" -latest -find MSBuild/Current/Bin/MSBuild.exe)",
-      "Bash(export PATH=\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin:$PATH\")"
+      "Bash(export PATH=\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin:$PATH\")",
+      "Bash(git submodule *)",
+      "Bash(command -v wasm-pack)",
+      "Bash(command -v npm)",
+      "Bash(command -v node)",
+      "Bash(cargo install *)",
+      "Bash(wasm-pack build *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Read(//c/Users/user/AppData/Local/Temp/claude/C--Users-user-Documents-app-elven-chewing/28d6e2a4-f0c6-4c6f-9a9d-0535946ffc91/tasks/**)",
+      "Bash(netstat -ano)",
+      "Bash(tasklist /FI \"PID eq 34312\")",
+      "PowerShell(Get-NetTCPConnection *)",
+      "Bash(taskkill //F //IM node.exe)"
     ]
   }
 }

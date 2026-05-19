@@ -26,9 +26,68 @@ on:
         value: ${{ jobs.package.outputs.unsigned-artifact-id }}
 
 jobs:
+  engine-tests:
+    runs-on: fedora-latest
+    name: Engine tests (cargo test)
+    # Engine-only tests are safe to run on PR / merge_group because they don't
+    # touch shared infrastructure or run any TSF code.
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: https://github.com/Swatinem/rust-cache@v2
+
+      # The workspace patches `chewing` to a sibling checkout while the
+      # FuzzyPartialPrefix fix is unreleased. Clone it next to the workspace
+      # so `cargo test` can resolve the [patch.crates-io] entry. Configure
+      # CHEWING_PATCH_REPO / CHEWING_PATCH_REF as Forgejo variables.
+      - name: Clone patched libchewing
+        env:
+          CHEWING_PATCH_REPO: ${{ vars.CHEWING_PATCH_REPO }}
+          CHEWING_PATCH_REF: ${{ vars.CHEWING_PATCH_REF || 'fix/fuzzy-partial-prefix-select-with-down' }}
+        run: |
+          if [ -z "$CHEWING_PATCH_REPO" ]; then
+            echo "::error::CHEWING_PATCH_REPO must be configured as a Forgejo variable while the local chewing patch is in place."
+            exit 1
+          fi
+          git clone --depth 1 --branch "$CHEWING_PATCH_REF" "$CHEWING_PATCH_REPO" ../libchewing-fix-cb
+
+      - name: Run engine kit tests
+        run: cargo test -p chewing_engine_kit
+
+  windows-integration:
+    name: Windows integration (self-hosted)
+    # Self-hosted runner can execute arbitrary code from the workflow file, so
+    # restrict it to events that only land vetted code: post-merge pushes and
+    # the merge queue. Fork PRs intentionally skip this job.
+    if: github.event_name == 'push' || github.event_name == 'merge_group'
+    runs-on: [self-hosted, windows]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: https://github.com/Swatinem/rust-cache@v2
+
+      - name: Clone patched libchewing
+        env:
+          CHEWING_PATCH_REPO: ${{ vars.CHEWING_PATCH_REPO }}
+          CHEWING_PATCH_REF: ${{ vars.CHEWING_PATCH_REF || 'fix/fuzzy-partial-prefix-select-with-down' }}
+        shell: pwsh
+        run: |
+          if (-not $env:CHEWING_PATCH_REPO) {
+            Write-Host "::error::CHEWING_PATCH_REPO must be configured as a Forgejo variable while the local chewing patch is in place."
+            exit 1
+          }
+          if (-not (Test-Path ../libchewing-fix-cb)) {
+            git clone --depth 1 --branch "$env:CHEWING_PATCH_REF" "$env:CHEWING_PATCH_REPO" ../libchewing-fix-cb
+          }
+
+      - name: Run workspace tests
+        shell: pwsh
+        run: cargo test --workspace --exclude xtask
+
   build:
     runs-on: fedora-latest
     name: Build
+    needs: engine-tests
     steps:
       - name: Cache llvm-mingw
         id: cache-llvm-linux

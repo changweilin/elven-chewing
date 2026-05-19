@@ -1,0 +1,1425 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <title>精靈語輸入法 Web Sandbox</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      :root {
+        --fg: #1f2937;
+        --muted: #6b7280;
+        --bg: #f9fafb;
+        --border: #d1d5db;
+        --accent: #2563eb;
+        --key-bg: #ffffff;
+        --key-border: #9ca3af;
+        --special-bg: #e5e7eb;
+        --pressed-bg: #c7d2fe;
+        --latched-bg: #fde68a;
+        --latched-border: #d97706;
+        --u: 40px;   /* base key unit (一個 1u 鍵的邊長) */
+        --kgap: 4px; /* 鍵與鍵之間的間隙 */
+      }
+      body {
+        font-family: "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
+        max-width: 1180px;
+        margin: 1.5rem auto;
+        padding: 0 1rem;
+        color: var(--fg);
+      }
+      header { margin-bottom: 1.25rem; }
+      h1 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+      .subtitle { color: var(--muted); font-size: 0.9rem; margin: 0; }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        grid-template-areas:
+          "preedit    settings"
+          "candidates settings"
+          "commit     settings"
+          "keyboard   keyboard";
+        gap: 1rem;
+      }
+      .panel.area-preedit    { grid-area: preedit; }
+      .panel.area-candidates { grid-area: candidates; }
+      .panel.area-commit     { grid-area: commit; }
+      .panel.area-settings   { grid-area: settings; }
+      .panel.area-keyboard   { grid-area: keyboard; }
+      @media (max-width: 880px) {
+        .layout {
+          grid-template-columns: 1fr;
+          /* 鍵盤緊貼候選字下方 — 打字時視線不用跨過 Commit/Settings；
+             歷史輸出與設定降到底部，因為輸入過程中很少看。 */
+          grid-template-areas:
+            "preedit"
+            "candidates"
+            "keyboard"
+            "commit"
+            "settings";
+        }
+      }
+      .panel {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.9rem 1rem;
+        background: var(--bg);
+      }
+      .panel h2 {
+        margin: 0 0 0.6rem;
+        font-size: 0.85rem;
+        letter-spacing: 0.05em;
+        color: var(--muted);
+      }
+      .preedit {
+        font-size: 1.6rem;
+        min-height: 2.2rem;
+        font-feature-settings: "tnum";
+        word-break: break-all;
+      }
+      .commit-log {
+        font-family: ui-monospace, monospace;
+        white-space: pre-wrap;
+        font-size: 0.85rem;
+        color: #374151;
+        max-height: 8rem;
+        overflow: auto;
+      }
+      .candidates {
+        font-size: 1rem;
+        min-height: 1.6rem;
+      }
+      .candidates .cand-grid {
+        display: grid;
+        grid-auto-rows: auto;
+        gap: 4px;
+      }
+      .candidates .cand {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border: 1px solid transparent;
+        border-radius: 4px;
+      }
+      .candidates .cand .idx {
+        margin-right: 6px;
+        font-size: 0.78rem;
+        font-family: ui-monospace, monospace;
+      }
+
+      /* Status / lang bar */
+      .lang-bar {
+        display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+        font-size: 0.85rem;
+        margin-bottom: 0.5rem;
+      }
+      .lang-bar .pill {
+        padding: 2px 8px; border-radius: 999px;
+        background: #e0e7ff; color: #1e3a8a;
+        cursor: pointer; user-select: none;
+      }
+      .lang-bar .pill[data-on="0"] { background: #f3f4f6; color: var(--muted); }
+      .lang-bar .pill:hover { filter: brightness(0.97); }
+      .lang-bar .toast {
+        margin-left: auto;
+        padding: 2px 8px;
+        font-size: 0.78rem;
+        border-radius: 4px;
+        opacity: 0;
+        transition: opacity 0.25s;
+      }
+      .lang-bar .toast.show { opacity: 1; }
+
+      /* Settings: tabs */
+      .settings-tabs {
+        display: flex; flex-wrap: wrap;
+        gap: 2px; margin-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .settings-tabs button {
+        background: transparent;
+        border: 0; padding: 5px 9px;
+        font-size: 0.82rem; cursor: pointer;
+        color: var(--muted);
+        border-bottom: 2px solid transparent;
+      }
+      .settings-tabs button.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+        font-weight: 600;
+      }
+      .settings .tab-page { display: none; }
+      .settings .tab-page.active { display: block; }
+      .settings .row.note {
+        grid-template-columns: 1fr;
+        color: var(--muted);
+        font-size: 0.78rem;
+        margin: 0.1rem 0 0.4rem;
+      }
+      .settings .row .hint {
+        font-size: 0.72rem;
+        color: var(--muted);
+      }
+      .settings input[type="color"] {
+        padding: 0; width: 2.6rem; height: 1.4rem;
+        border: 1px solid var(--border); cursor: pointer; background: #fff;
+      }
+      .settings .color-cell {
+        display: flex; gap: 0.4rem; align-items: center;
+      }
+      .settings .color-cell input[type="text"] {
+        flex: 1; font-family: ui-monospace, monospace; font-size: 0.8rem;
+      }
+
+      /* Settings form */
+      .settings .row {
+        display: grid;
+        grid-template-columns: 11rem 1fr;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 0.4rem;
+        font-size: 0.9rem;
+      }
+      .settings label { color: var(--fg); }
+      .settings input, .settings select { width: 100%; padding: 3px 6px; }
+      .settings .actions {
+        display: flex; gap: 0.5rem; margin-top: 0.6rem;
+      }
+      .btn {
+        padding: 6px 12px; border: 1px solid var(--border);
+        border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.9rem;
+      }
+      .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+      .btn:hover { filter: brightness(0.97); }
+
+      /* === Virtual keyboard === */
+      .kb-toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+        margin-bottom: 0.6rem;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      .kb-hint {
+        margin-left: auto;
+        font-size: 0.78rem;
+      }
+      .kb-toolbar .seg {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .kb-toolbar .seg button {
+        border: 0;
+        background: #fff;
+        padding: 4px 12px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        color: var(--fg);
+      }
+      .kb-toolbar .seg button.active {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .kb-wrap {
+        display: flex;
+        gap: calc(var(--kgap) * 3);
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .kb-main, .kb-nav, .kb-arrows {
+        display: flex;
+        flex-direction: column;
+        gap: var(--kgap);
+      }
+      .kb-row { display: flex; gap: var(--kgap); }
+      .key {
+        width: var(--u);
+        height: var(--u);
+        padding: 2px 4px;
+        border: 1px solid var(--key-border);
+        border-bottom-width: 2px;
+        border-radius: 6px;
+        background: var(--key-bg);
+        font-family: ui-monospace, monospace;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        /* 不設 touch-action: none — 否則瀏覽器會把雙點當第二次 click，
+           造成「想雙點縮放卻打了兩個字」。預設 auto 讓瀏覽器偵測縮放手勢
+           並抑制對應的 click。 */
+        text-align: center;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        line-height: 1.05;
+        font-size: 0.92rem;
+        box-sizing: border-box;
+      }
+      .key.label-sm { font-size: 0.75rem; }
+      .key.label-xs { font-size: 0.66rem; }
+      .key.spacer { visibility: hidden; }
+      .key.special { background: var(--special-bg); }
+      .key:hover { background: #eef2ff; }
+      .key.pressed { background: var(--pressed-bg); transform: translateY(1px); border-bottom-width: 1px; }
+      .key.latched {
+        background: var(--latched-bg);
+        border-color: var(--latched-border);
+      }
+      .key .zh {
+        font-size: 0.65rem;
+        color: var(--muted);
+        margin-top: 2px;
+        font-family: "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
+      }
+      .key.special .zh { color: #6b7280; }
+      .key .shifted {
+        font-size: 0.6rem;
+        color: var(--muted);
+        margin-bottom: 1px;
+      }
+
+      /* 寬度等級 = N*u + (N-1)*kgap。也套用到 .key-stack。 */
+      .key.w125, .key-stack.w125 { width: calc(var(--u) * 1.25 + var(--kgap) * 0.25); }
+      .key.w15,  .key-stack.w15  { width: calc(var(--u) * 1.5  + var(--kgap) * 0.5); }
+      .key.w175, .key-stack.w175 { width: calc(var(--u) * 1.75 + var(--kgap) * 0.75); }
+      .key.w2,   .key-stack.w2   { width: calc(var(--u) * 2    + var(--kgap)); }
+      .key.w225, .key-stack.w225 { width: calc(var(--u) * 2.25 + var(--kgap) * 1.25); }
+      .key.w275, .key-stack.w275 { width: calc(var(--u) * 2.75 + var(--kgap) * 1.75); }
+      .key.w625, .key-stack.w625 { width: calc(var(--u) * 6.25 + var(--kgap) * 5.25); }
+      .key.w575, .key-stack.w575 { width: calc(var(--u) * 5.75 + var(--kgap) * 4.75); }
+
+      /* 手機版：有 shift 符號的鍵分成上下兩個獨立可點按的半鍵；
+         整體占用空間 = 原本 1u 鍵的寬高，相對位置不變。 */
+      .key-stack {
+        width: var(--u);
+        height: var(--u);
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--key-border);
+        border-bottom-width: 2px;
+        border-radius: 6px;
+        background: var(--key-bg);
+        overflow: hidden;
+        box-sizing: border-box;
+      }
+      .key-stack .key-half {
+        flex: 1 1 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        font-family: ui-monospace, monospace;
+        font-size: 0.78rem;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        color: var(--fg);
+      }
+      .key-stack .key-half.top {
+        border-bottom: 1px solid var(--key-border);
+        color: var(--muted);
+        font-size: 0.72rem;
+      }
+      .key-stack .key-half.pressed {
+        background: var(--pressed-bg);
+      }
+      .key-stack .key-half .zh {
+        font-size: 0.55rem;
+        color: var(--muted);
+        margin-top: 1px;
+        font-family: "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
+      }
+
+      /* 行間額外間距 (function row 與 main 之間) */
+      .kb-row-spacer { height: calc(var(--u) * 0.4); }
+
+      .kb-func-row .key { font-size: 0.7rem; }
+      .kb-func-gap { width: calc(var(--u) * 0.5); }
+
+      @media (max-width: 720px) {
+        :root { --u: 38px; --kgap: 3px; }
+        body { margin: 0.75rem auto; padding: 0 0.6rem; }
+        .panel { padding: 0.6rem 0.7rem; }
+        .panel h2 { margin-bottom: 0.35rem; }
+        .key { font-size: 0.78rem; }
+        /* 在窄螢幕讓 kb-wrap 改為直向堆疊，主鍵區在上、nav 在下。
+           整列仍是 ANSI 寬度，所以允許水平捲動以保留相對位置。 */
+        .kb-wrap {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: calc(var(--kgap) * 4);
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          padding-bottom: 6px;
+        }
+        .kb-main, .kb-nav { flex: 0 0 auto; }
+        /* hint 在窄螢幕容易佔掉一整行；隱藏避免把鍵盤推下去。 */
+        .kb-hint { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>精靈語輸入法 — Web Sandbox</h1>
+      <p class="subtitle">
+        純引擎預覽，跑在 WebAssembly 上；實體鍵盤可用，下方虛擬鍵盤主要供觸控、展示與非打字者使用。
+        TSF、候選字視窗、IPC 不在此沙盒範圍——詳見
+        <code>design/ci-self-hosted-runner.md</code> 的 Windows 整合說明。
+      </p>
+    </header>
+
+    <div class="layout">
+      <section class="panel area-preedit">
+        <h2>輸入預覽 Preedit</h2>
+        <div class="lang-bar" id="lang-bar">
+          <span>輸入法狀態</span>
+          <span class="pill" id="pill-lang" title="點按切換中/英">中</span>
+          <span class="pill" id="pill-shape" title="點按切換全/半">半</span>
+          <span class="pill" id="pill-simp" data-on="0" title="Ctrl+F12 或點按切換">簡</span>
+          <span class="toast" id="toast"></span>
+        </div>
+        <div id="preedit" class="preedit"></div>
+      </section>
+
+      <section class="panel area-candidates">
+        <h2>候選字 Candidates</h2>
+        <div id="candidates" class="candidates"></div>
+      </section>
+
+      <section class="panel area-commit">
+        <h2>已提交文字 Committed</h2>
+        <div id="commit-log" class="commit-log"></div>
+      </section>
+
+      <section class="panel settings area-settings">
+        <h2>引擎設定 Engine Settings</h2>
+        <div class="settings-tabs" id="settings-tabs">
+          <button type="button" data-tab="typing" class="active">輸入</button>
+          <button type="button" data-tab="cand">選字</button>
+          <button type="button" data-tab="lang">語言</button>
+          <button type="button" data-tab="kbd">鍵盤</button>
+          <button type="button" data-tab="ui">外觀</button>
+          <button type="button" data-tab="misc">其他</button>
+        </div>
+        <form id="settings-form">
+          <!-- ===== Tab: 輸入 ===== -->
+          <div class="tab-page active" data-tab="typing">
+            <div class="row">
+              <label for="conv">轉換引擎</label>
+              <select id="conv" name="conv_engine">
+                <option value="0">Simple</option>
+                <option value="1">Chewing（預設）</option>
+                <option value="2">Fuzzy</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="partial">部分音節匹配</label>
+              <input id="partial" name="partial_syllable_match" type="checkbox" />
+            </div>
+            <div class="row note">模糊注音猜詞 (聲母/前幾碼)。會自動切換為 Fuzzy 引擎。</div>
+
+            <div class="row">
+              <label for="autolearn">啟用自動學習</label>
+              <input id="autolearn" name="enable_auto_learn" type="checkbox" checked />
+            </div>
+            <div class="row">
+              <label for="addfwd">向前加詞</label>
+              <input id="addfwd" name="add_phrase_forward" type="checkbox" checked />
+            </div>
+            <div class="row note">取消勾選即「向後加詞」。影響 Ctrl+數字 加片語的方向。</div>
+
+            <div class="row">
+              <label for="easyshift">Shift+符號 易符號</label>
+              <input id="easyshift" name="easy_symbols_with_shift" type="checkbox" checked />
+            </div>
+            <div class="row">
+              <label for="easyshiftctrl">Ctrl+Shift+符號 易符號</label>
+              <input id="easyshiftctrl" name="easy_symbols_with_shift_ctrl" type="checkbox" />
+            </div>
+
+            <div class="row">
+              <label for="fullsym">Shift+符號 輸出全形</label>
+              <input id="fullsym" name="full_shape_symbols" type="checkbox" checked />
+            </div>
+            <div class="row">
+              <label for="upper">Shift+字母 暫態英大寫</label>
+              <input id="upper" name="upper_case_with_shift" type="checkbox" />
+            </div>
+
+            <div class="row">
+              <label for="fwtoggle">Shift+Space 切換全/半形</label>
+              <input id="fwtoggle" name="enable_fullwidth_toggle_key" type="checkbox" />
+            </div>
+            <div class="row">
+              <label for="esc">Esc 清空緩衝</label>
+              <input id="esc" name="esc_clean_all_buf" type="checkbox" />
+            </div>
+          </div>
+
+          <!-- ===== Tab: 選字 ===== -->
+          <div class="tab-page" data-tab="cand">
+            <div class="row">
+              <label for="selkey">選字鍵</label>
+              <select id="selkey" name="sel_key_type">
+                <option value="0">1234567890</option>
+                <option value="1">asdfghjkl;</option>
+                <option value="2">asdfzxcv89</option>
+                <option value="3">asdfjkl789</option>
+                <option value="4">aoeuhtn789</option>
+                <option value="5">1234qweras</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="cpp">每頁候選字數</label>
+              <input id="cpp" name="cand_per_page" type="number" min="1" max="10" value="9" />
+            </div>
+            <div class="row">
+              <label for="cpr">每列候選字數</label>
+              <input id="cpr" name="cand_per_row" type="number" min="1" max="10" value="3" />
+            </div>
+            <div class="row">
+              <label for="cursor">游標式選字列表</label>
+              <input id="cursor" name="cursor_cand_list" type="checkbox" checked />
+            </div>
+            <div class="row note">影響選字面板顯示時是否高亮目前游標位置。</div>
+            <div class="row">
+              <label for="space">空白鍵選字</label>
+              <input id="space" name="show_cand_with_space_key" type="checkbox" />
+            </div>
+            <div class="row">
+              <label for="advance">選字後移動游標</label>
+              <input id="advance" name="advance_after_selection" type="checkbox" checked />
+            </div>
+            <div class="row">
+              <label for="rearward">向後選詞</label>
+              <input id="rearward" name="phrase_choice_rearward" type="checkbox" />
+            </div>
+            <div class="row">
+              <label for="sortfreq">依詞頻排序候選字</label>
+              <input id="sortfreq" name="sort_candidates_by_frequency" type="checkbox" />
+            </div>
+          </div>
+
+          <!-- ===== Tab: 語言 ===== -->
+          <div class="tab-page" data-tab="lang">
+            <div class="row">
+              <label for="def-eng">預設英數模式</label>
+              <input id="def-eng" name="default_english" type="checkbox" />
+            </div>
+            <div class="row">
+              <label for="def-full">預設全形</label>
+              <input id="def-full" name="default_full_space" type="checkbox" />
+            </div>
+            <div class="row">
+              <label for="simp">輸出簡體中文</label>
+              <input id="simp" name="output_simp_chinese" type="checkbox" />
+            </div>
+            <div class="row note">使用 zhconv 即時轉換預覽/送出/候選字內容。</div>
+            <div class="row">
+              <label for="switch-shift">Shift 切換中/英</label>
+              <input id="switch-shift" name="switch_lang_with_shift" type="checkbox" checked />
+            </div>
+            <div class="row">
+              <label for="shift-sens">Shift 短按判定 (ms)</label>
+              <input id="shift-sens" name="shift_key_sensitivity" type="number" min="50" max="1000" step="10" value="200" />
+            </div>
+            <div class="row">
+              <label for="caps">啟用 CapsLock 切換</label>
+              <input id="caps" name="enable_caps_lock" type="checkbox" />
+            </div>
+            <div class="row">
+              <label for="caps-chi">CapsLock 鎖中文</label>
+              <input id="caps-chi" name="lock_chinese_on_caps_lock" type="checkbox" checked />
+            </div>
+            <div class="row note">關閉時 CapsLock 改為單純切大/小寫英文。</div>
+            <div class="row">
+              <label for="sync-mode">開關時同步語言狀態</label>
+              <input id="sync-mode" name="sync_lang_mode_openclose" type="checkbox" />
+            </div>
+            <div class="row note">桌面 IME 行為:於每個文件開關時記錄/還原 中英模式。Web 沙盒僅作為設定持久化。</div>
+          </div>
+
+          <!-- ===== Tab: 鍵盤 ===== -->
+          <div class="tab-page" data-tab="kbd">
+            <div class="row">
+              <label for="kb">注音鍵盤配置</label>
+              <select id="kb" name="keyboard_layout">
+                <option value="0">標準（預設）</option>
+                <option value="1">許氏 Hsu</option>
+                <option value="2">IBM</option>
+                <option value="3">精業 Gin-Yieh</option>
+                <option value="4">倚天 Eten</option>
+                <option value="5">倚天 26</option>
+                <option value="6">Dvorak</option>
+                <option value="7">Dvorak-Hsu</option>
+                <option value="8">大千 26</option>
+                <option value="9">漢語拼音</option>
+                <option value="10">通用拼音</option>
+                <option value="11">MPS2 拼音</option>
+                <option value="12">Carpalx</option>
+                <option value="13">Colemak-DH ANSI</option>
+                <option value="14">Colemak-DH ortho</option>
+                <option value="15">Workman</option>
+                <option value="16">Colemak</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="simul">英數模擬鍵盤</label>
+              <select id="simul" name="simulate_english_layout">
+                <option value="0">QWERTY（預設）</option>
+                <option value="1">Dvorak</option>
+                <option value="2">QGMLWY (Carpalx)</option>
+                <option value="3">Colemak</option>
+                <option value="4">Colemak-DH ANSI</option>
+                <option value="5">Colemak-DH ortho</option>
+                <option value="6">Workman</option>
+              </select>
+            </div>
+            <div class="row note">桌面 IME 行為:英文模式時把實體 Dvorak/Colemak... 反向映射回 QWERTY。Web 沙盒由瀏覽器接管布局,此設定僅儲存,不重新映射輸入。</div>
+          </div>
+
+          <!-- ===== Tab: 外觀 ===== -->
+          <div class="tab-page" data-tab="ui">
+            <div class="row">
+              <label for="fontsize">字體大小</label>
+              <input id="fontsize" name="font_size" type="number" min="10" max="48" value="16" />
+            </div>
+            <div class="row">
+              <label for="fontfamily">字型</label>
+              <input id="fontfamily" name="font_family" type="text" value="Segoe UI" />
+            </div>
+            <div class="row">
+              <label for="fg">文字色 (RRGGBBAA)</label>
+              <div class="color-cell">
+                <input type="color" data-pair="font_fg_color" />
+                <input id="fg" name="font_fg_color" type="text" value="000000FF" />
+              </div>
+            </div>
+            <div class="row">
+              <label for="bg">背景色</label>
+              <div class="color-cell">
+                <input type="color" data-pair="font_bg_color" />
+                <input id="bg" name="font_bg_color" type="text" value="FAFAFAFF" />
+              </div>
+            </div>
+            <div class="row">
+              <label for="hifg">高亮文字色</label>
+              <div class="color-cell">
+                <input type="color" data-pair="font_highlight_fg_color" />
+                <input id="hifg" name="font_highlight_fg_color" type="text" value="FFFFFFFF" />
+              </div>
+            </div>
+            <div class="row">
+              <label for="hibg">高亮背景色</label>
+              <div class="color-cell">
+                <input type="color" data-pair="font_highlight_bg_color" />
+                <input id="hibg" name="font_highlight_bg_color" type="text" value="000000FF" />
+              </div>
+            </div>
+            <div class="row">
+              <label for="numfg">選字鍵色</label>
+              <div class="color-cell">
+                <input type="color" data-pair="font_number_fg_color" />
+                <input id="numfg" name="font_number_fg_color" type="text" value="0000FFFF" />
+              </div>
+            </div>
+            <div class="row">
+              <label for="border">選字邊框色</label>
+              <div class="color-cell">
+                <input type="color" data-pair="cand_list_border_color" />
+                <input id="border" name="cand_list_border_color" type="text" value="D6D9DBFF" />
+              </div>
+            </div>
+            <div class="row">
+              <label for="nfg">通知文字色</label>
+              <div class="color-cell">
+                <input type="color" data-pair="notify_fg_color" />
+                <input id="nfg" name="notify_fg_color" type="text" value="000000FF" />
+              </div>
+            </div>
+            <div class="row">
+              <label for="nbg">通知背景色</label>
+              <div class="color-cell">
+                <input type="color" data-pair="notify_bg_color" />
+                <input id="nbg" name="notify_bg_color" type="text" value="FCFBDAFF" />
+              </div>
+            </div>
+            <div class="row">
+              <label for="nborder">通知邊框色</label>
+              <div class="color-cell">
+                <input type="color" data-pair="notify_border_color" />
+                <input id="nborder" name="notify_border_color" type="text" value="D6D9DBFF" />
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== Tab: 其他 ===== -->
+          <div class="tab-page" data-tab="misc">
+            <div class="row">
+              <label for="show-notify">顯示模式變更通知</label>
+              <input id="show-notify" name="show_notification" type="checkbox" checked />
+            </div>
+            <div class="row note">桌面 IME 切中英/簡繁時的浮動氣球;Web 改用畫面上方 lang bar 短暫提示。</div>
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="btn primary">套用並重置</button>
+            <button type="button" class="btn" id="clear-buffer">清空緩衝</button>
+            <button type="button" class="btn" id="reset-defaults">回預設值</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel area-keyboard">
+        <div class="kb-toolbar">
+          <span>虛擬鍵盤</span>
+          <div class="seg" id="layout-seg">
+            <button type="button" data-layout="win" class="active">Windows</button>
+            <button type="button" data-layout="mac">Mac</button>
+          </div>
+          <span class="kb-hint">
+            短按 = 跟實體鍵盤一樣，僅在按壓期間生效；長按 = 持續鎖定，再點一次即放開。
+          </span>
+        </div>
+        <div class="kb-wrap" id="virtual-keyboard"></div>
+      </section>
+    </div>
+
+    <script type="module">
+      import init, { ChewingDemo } from "./pkg/elven_chewing_web_demo.js";
+
+      await init();
+      const demo = new ChewingDemo();
+      // 取得預設 config (從 wasm 側來,確保欄位完全同步)
+      const DEFAULTS = JSON.parse(ChewingDemo.defaultConfig());
+      // 目前生效的 config (對應 form 內欄位)
+      let currentCfg = structuredClone(DEFAULTS);
+      // 用來測試 Shift 短按 (switch_lang_with_shift)
+      let shiftDownAt = 0;
+      let shiftAccompaniedByKey = false;
+
+      // --- 標準注音映射（供虛擬鍵盤下排顯示對應符號） ---
+      const ZHUYIN = {
+        "1":"ㄅ","2":"ㄉ","3":"ˇ","4":"ˋ","5":"ㄓ","6":"ˊ","7":"˙","8":"ㄚ","9":"ㄞ","0":"ㄢ","-":"ㄦ","=":"",
+        "q":"ㄆ","w":"ㄊ","e":"ㄍ","r":"ㄐ","t":"ㄔ","y":"ㄗ","u":"ㄧ","i":"ㄛ","o":"ㄟ","p":"ㄣ","[":"「","]":"」",
+        "a":"ㄇ","s":"ㄋ","d":"ㄎ","f":"ㄑ","g":"ㄕ","h":"ㄘ","j":"ㄨ","k":"ㄜ","l":"ㄠ",";":"ㄤ","'":"、",
+        "z":"ㄈ","x":"ㄌ","c":"ㄏ","v":"ㄒ","b":"ㄖ","n":"ㄙ","m":"ㄩ",",":"ㄝ",".":"ㄡ","/":"ㄥ",
+      };
+      // Shift 上層字符 (用於虛擬鍵盤按下 Shift 時送出的字)
+      const SHIFT_MAP = {
+        "`":"~","1":"!","2":"@","3":"#","4":"$","5":"%","6":"^","7":"&","8":"*","9":"(","0":")",
+        "-":"_","=":"+","[":"{","]":"}","\\":"|",";":":","'":"\"",",":"<",".":">","/":"?",
+      };
+
+      // libchewing KeyState 位元值 (input.rs 中 #[repr(u32)] 的設定)
+      const MOD = {
+        SHIFT:    1 << 0,
+        CAPSLOCK: 1 << 1,
+        CONTROL:  1 << 2,
+        ALT:      1 << 3,
+        SUPER:    1 << 6,
+      };
+
+      // 目前哪個修飾鍵被「鎖定」(短按 latch) 或「按住」(long-press)。
+      // effective bits = (latched | held)
+      const modState = {
+        held: 0,
+        latched: 0,
+      };
+      function modBits() { return modState.held | modState.latched; }
+
+      // === 鍵盤排版 ===
+      // 每一格描述：[ascii / null] + spec object
+      //   { a: ascii_char, sp: special_name, mod: "Shift"|..., label, sub, w: width_class }
+      // 同一個 key 不會同時有 a 與 sp。
+      function row(...keys) { return keys; }
+
+      // 公共上排 (功能列)。Mac 版以 ⎋ 標示 Esc。
+      const FUNC_ROW_WIN = row(
+        { sp: "Escape", label: "Esc", cls: "special" },
+        { gap: 0.5 },
+        { sp: "F1",  label: "F1", cls: "special" },
+        { sp: "F2",  label: "F2", cls: "special" },
+        { sp: "F3",  label: "F3", cls: "special" },
+        { sp: "F4",  label: "F4", cls: "special" },
+        { gap: 0.3 },
+        { sp: "F5",  label: "F5", cls: "special" },
+        { sp: "F6",  label: "F6", cls: "special" },
+        { sp: "F7",  label: "F7", cls: "special" },
+        { sp: "F8",  label: "F8", cls: "special" },
+        { gap: 0.3 },
+        { sp: "F9",  label: "F9",  cls: "special" },
+        { sp: "F10", label: "F10", cls: "special" },
+        { sp: "F11", label: "F11", cls: "special" },
+        { sp: "F12", label: "F12", cls: "special" },
+      );
+      const FUNC_ROW_MAC = FUNC_ROW_WIN.map(k => k.gap ? k : { ...k });
+
+      // 數字列 (Win/Mac 同；只是 Win = Backspace, Mac = delete)
+      function numberRow(layout) {
+        const last = layout === "mac"
+          ? { sp: "Backspace", label: "delete", w: "w2", cls: "special" }
+          : { sp: "Backspace", label: "Backspace", w: "w2", cls: "special" };
+        return row(
+          { a: "`",  label: "`",  shifted: "~" },
+          { a: "1",  label: "1",  shifted: "!" },
+          { a: "2",  label: "2",  shifted: "@" },
+          { a: "3",  label: "3",  shifted: "#" },
+          { a: "4",  label: "4",  shifted: "$" },
+          { a: "5",  label: "5",  shifted: "%" },
+          { a: "6",  label: "6",  shifted: "^" },
+          { a: "7",  label: "7",  shifted: "&" },
+          { a: "8",  label: "8",  shifted: "*" },
+          { a: "9",  label: "9",  shifted: "(" },
+          { a: "0",  label: "0",  shifted: ")" },
+          { a: "-",  label: "-",  shifted: "_" },
+          { a: "=",  label: "=",  shifted: "+" },
+          last,
+        );
+      }
+
+      // qwertyuiop 列
+      function topAlphaRow(layout) {
+        const tab = layout === "mac"
+          ? { sp: "Tab", label: "tab", w: "w15", cls: "special" }
+          : { sp: "Tab", label: "Tab", w: "w15", cls: "special" };
+        return row(
+          tab,
+          ...["q","w","e","r","t","y","u","i","o","p"].map(c => ({ a: c, label: c.toUpperCase() })),
+          { a: "[",  label: "[", shifted: "{" },
+          { a: "]",  label: "]", shifted: "}" },
+          { a: "\\", label: "\\", shifted: "|", w: "w15" },
+        );
+      }
+
+      // asdfghjkl;' 列
+      function homeRow(layout) {
+        const caps = layout === "mac"
+          ? { mod: "CAPSLOCK", label: "caps lock", w: "w175", cls: "special" }
+          : { mod: "CAPSLOCK", label: "Caps Lock", w: "w175", cls: "special" };
+        const enter = layout === "mac"
+          ? { sp: "Return", label: "return", w: "w225", cls: "special" }
+          : { sp: "Return", label: "Enter", w: "w225", cls: "special" };
+        return row(
+          caps,
+          ...["a","s","d","f","g","h","j","k","l"].map(c => ({ a: c, label: c.toUpperCase() })),
+          { a: ";", label: ";", shifted: ":" },
+          { a: "'", label: "'", shifted: "\"" },
+          enter,
+        );
+      }
+
+      // zxcvbnm,./ 列
+      function shiftRow(layout) {
+        const lShift = layout === "mac"
+          ? { mod: "SHIFT", label: "shift", w: "w225", cls: "special" }
+          : { mod: "SHIFT", label: "Shift", w: "w225", cls: "special" };
+        const rShift = layout === "mac"
+          ? { mod: "SHIFT", label: "shift", w: "w275", cls: "special" }
+          : { mod: "SHIFT", label: "Shift", w: "w275", cls: "special" };
+        return row(
+          lShift,
+          ...["z","x","c","v","b","n","m"].map(c => ({ a: c, label: c.toUpperCase() })),
+          { a: ",", label: ",", shifted: "<" },
+          { a: ".", label: ".", shifted: ">" },
+          { a: "/", label: "/", shifted: "?" },
+          rShift,
+        );
+      }
+
+      // 最下排：Win 與 Mac 排法不同
+      function modifierRow(layout) {
+        if (layout === "mac") {
+          return row(
+            { label: "fn", w: "w125", cls: "special", inert: true },
+            { mod: "CONTROL", label: "control", w: "w125", cls: "special" },
+            { mod: "ALT",     label: "option",  w: "w125", cls: "special" },
+            { mod: "SUPER",   label: "command", w: "w125", cls: "special" },
+            { a: " ", label: "", sub: "空白 / Space", w: "w575" },
+            { mod: "SUPER",   label: "command", w: "w125", cls: "special" },
+            { mod: "ALT",     label: "option",  w: "w125", cls: "special" },
+          );
+        }
+        return row(
+          { mod: "CONTROL", label: "Ctrl",  w: "w125", cls: "special" },
+          { mod: "SUPER",   label: "⊞ Win", w: "w125", cls: "special" },
+          { mod: "ALT",     label: "Alt",   w: "w125", cls: "special" },
+          { a: " ", label: "", sub: "空白 / Space", w: "w625" },
+          { mod: "ALT",     label: "Alt",   w: "w125", cls: "special" },
+          { mod: "SUPER",   label: "⊞ Win", w: "w125", cls: "special" },
+          { label: "≡", w: "w125", cls: "special", inert: true },
+          { mod: "CONTROL", label: "Ctrl",  w: "w125", cls: "special" },
+        );
+      }
+
+      // 右側導航 + 方向鍵叢集 (Mac 沒 Ins，只有 Del 但放右上 fn+delete；簡化以 forward delete 呈現)
+      function navColumn(layout) {
+        if (layout === "mac") {
+          return [
+            row(
+              { sp: "Delete", label: "fn delete", w: "w15", cls: "special label-sm" },
+              { sp: "Home", label: "Home", cls: "special label-sm" },
+              { sp: "PageUp", label: "Pg Up", cls: "special label-sm" },
+            ),
+            row(
+              { spacer: true, w: "w15" },
+              { sp: "End", label: "End", cls: "special label-sm" },
+              { sp: "PageDown", label: "Pg Dn", cls: "special label-sm" },
+            ),
+          ];
+        }
+        return [
+          row(
+            { sp: "Insert", label: "Insert", cls: "special label-sm" },
+            { sp: "Home",   label: "Home",   cls: "special label-sm" },
+            { sp: "PageUp", label: "Pg Up",  cls: "special label-sm" },
+          ),
+          row(
+            { sp: "Delete",   label: "Delete", cls: "special label-sm" },
+            { sp: "End",      label: "End",    cls: "special label-sm" },
+            { sp: "PageDown", label: "Pg Dn",  cls: "special label-sm" },
+          ),
+        ];
+      }
+
+      const ARROW_BLOCK = [
+        row({ spacer: true }, { sp: "ArrowUp", label: "↑", cls: "special" }, { spacer: true }),
+        row(
+          { sp: "ArrowLeft",  label: "←", cls: "special" },
+          { sp: "ArrowDown",  label: "↓", cls: "special" },
+          { sp: "ArrowRight", label: "→", cls: "special" },
+        ),
+      ];
+
+      // --- 渲染 ---
+      const preedit = document.getElementById("preedit");
+      const commitLog = document.getElementById("commit-log");
+      const cands = document.getElementById("candidates");
+      const form = document.getElementById("settings-form");
+      const clearBtn = document.getElementById("clear-buffer");
+      const kbRoot = document.getElementById("virtual-keyboard");
+      const layoutSeg = document.getElementById("layout-seg");
+
+      let layout = "win";
+      const modButtons = new Map(); // modName -> [btn, btn, ...]
+
+      // 與 CSS @media (max-width: 720px) 同步：在此邊界以下視為手機版。
+      const mobileMQ = window.matchMedia("(max-width: 720px)");
+      let isMobile = mobileMQ.matches;
+      mobileMQ.addEventListener("change", (e) => {
+        isMobile = e.matches;
+        // 重建鍵盤以套用 / 撤掉「上下分半」鍵；保留 modifier 狀態無意義。
+        modState.held = 0;
+        modState.latched = 0;
+        buildKeyboard(layout);
+      });
+
+      function render() {
+        preedit.textContent = demo.display();
+        const committed = demo.displayCommit();
+        if (committed) commitLog.textContent += committed;
+        const list = demo.candidates();
+        const selKeys = demo.selKeys();
+        cands.innerHTML = "";
+        if (list.length > 0) {
+          const grid = document.createElement("div");
+          grid.className = "cand-grid";
+          const perRow = Math.max(1, currentCfg.cand_per_row | 0);
+          grid.style.gridTemplateColumns = `repeat(${perRow}, max-content)`;
+          list.forEach((cand, i) => {
+            const span = document.createElement("span");
+            span.className = "cand";
+            // 套用候選字面板樣式 (對應 ChewingTsfConfig 的 font_* / cand_list_border_color)
+            applyCandStyle(span, i === 0 && currentCfg.cursor_cand_list);
+            const idxChar = selKeys[i] || String(i + 1);
+            span.innerHTML = `<span class="idx">${escapeHtml(idxChar)}</span>${escapeHtml(cand)}`;
+            grid.appendChild(span);
+          });
+          cands.appendChild(grid);
+        }
+        refreshLangBar();
+      }
+
+      function applyCandStyle(node, highlight) {
+        const c = currentCfg;
+        node.style.fontFamily = c.font_family || "inherit";
+        node.style.fontSize = (c.font_size || 16) + "px";
+        node.style.borderColor = hexAlphaToCss(c.cand_list_border_color);
+        if (highlight) {
+          node.style.color = hexAlphaToCss(c.font_highlight_fg_color);
+          node.style.background = hexAlphaToCss(c.font_highlight_bg_color);
+        } else {
+          node.style.color = hexAlphaToCss(c.font_fg_color);
+          node.style.background = hexAlphaToCss(c.font_bg_color);
+        }
+        // selkey idx 顏色
+        requestAnimationFrame(() => {
+          const idx = node.querySelector(".idx");
+          if (idx) idx.style.color = hexAlphaToCss(c.font_number_fg_color);
+        });
+      }
+
+      function hexAlphaToCss(s) {
+        if (!s || typeof s !== "string") return "";
+        const m = s.match(/^#?([0-9a-f]{6})([0-9a-f]{2})?$/i);
+        if (!m) return "#" + s;
+        const rgb = m[1];
+        const a = m[2] || "ff";
+        const alpha = parseInt(a, 16) / 255;
+        return `rgba(${parseInt(rgb.slice(0,2),16)},${parseInt(rgb.slice(2,4),16)},${parseInt(rgb.slice(4,6),16)},${alpha.toFixed(3)})`;
+      }
+
+      function refreshLangBar() {
+        const lang = demo.langMode();
+        const shape = demo.shapeMode();
+        const simp = demo.simpChinese();
+        document.getElementById("pill-lang").textContent = lang === "chi" ? "中" : "英";
+        document.getElementById("pill-shape").textContent = shape === "full" ? "全" : "半";
+        document.getElementById("pill-simp").dataset.on = simp ? "1" : "0";
+      }
+
+      function showToast(msg) {
+        if (!currentCfg.show_notification) return;
+        const t = document.getElementById("toast");
+        t.textContent = msg;
+        t.style.background = hexAlphaToCss(currentCfg.notify_bg_color);
+        t.style.color = hexAlphaToCss(currentCfg.notify_fg_color);
+        t.style.border = "1px solid " + hexAlphaToCss(currentCfg.notify_border_color);
+        t.classList.add("show");
+        clearTimeout(showToast._h);
+        showToast._h = setTimeout(() => t.classList.remove("show"), 1400);
+      }
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({
+          "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+        }[c]));
+      }
+
+      function rebuildModButtons() {
+        modButtons.clear();
+        kbRoot.querySelectorAll(".key[data-mod]").forEach(el => {
+          const name = el.dataset.mod;
+          if (!modButtons.has(name)) modButtons.set(name, []);
+          modButtons.get(name).push(el);
+        });
+        syncModButtonsVisuals();
+      }
+      function syncModButtonsVisuals() {
+        for (const [name, btns] of modButtons) {
+          const bit = MOD[name];
+          const isLatched = (modState.latched & bit) !== 0;
+          const isHeld = (modState.held & bit) !== 0;
+          btns.forEach(b => {
+            b.classList.toggle("latched", isLatched);
+            b.classList.toggle("pressed", isHeld);
+          });
+        }
+      }
+
+      function buildKeyboard(layoutName) {
+        layout = layoutName;
+        kbRoot.innerHTML = "";
+
+        const main = document.createElement("div");
+        main.className = "kb-main";
+
+        // Function row (Esc + F-keys)
+        appendRow(main, layout === "mac" ? FUNC_ROW_MAC : FUNC_ROW_WIN, "kb-func-row");
+        // 與主鍵區留個視覺間隔
+        const spacer = document.createElement("div");
+        spacer.className = "kb-row-spacer";
+        main.appendChild(spacer);
+        // 五排主鍵
+        appendRow(main, numberRow(layout));
+        appendRow(main, topAlphaRow(layout));
+        appendRow(main, homeRow(layout));
+        appendRow(main, shiftRow(layout));
+        appendRow(main, modifierRow(layout));
+
+        const nav = document.createElement("div");
+        nav.className = "kb-nav";
+        for (const r of navColumn(layout)) appendRow(nav, r);
+        // 方向鍵叢集需要與 nav 之間隔一行
+        const navSpacer = document.createElement("div");
+        navSpacer.className = "kb-row-spacer";
+        nav.appendChild(navSpacer);
+        for (const r of ARROW_BLOCK) appendRow(nav, r);
+
+        kbRoot.appendChild(main);
+        kbRoot.appendChild(nav);
+
+        rebuildModButtons();
+      }
+
+      function appendRow(parent, cells, extraCls) {
+        const div = document.createElement("div");
+        div.className = "kb-row" + (extraCls ? " " + extraCls : "");
+        for (const cell of cells) {
+          if (cell.gap) {
+            const g = document.createElement("span");
+            g.style.width = `calc(var(--u) * ${cell.gap})`;
+            div.appendChild(g);
+            continue;
+          }
+          if (cell.spacer) {
+            const s = document.createElement("span");
+            s.className = "key spacer" + (cell.w ? " " + cell.w : "");
+            div.appendChild(s);
+            continue;
+          }
+          // 手機版：有 shifted 符號的可輸入鍵改成上下分半，
+          // 上半送 shifted 字元、下半送 base 字元 + 顯示注音。
+          if (isMobile && cell.shifted !== undefined && cell.a !== undefined) {
+            const stack = document.createElement("div");
+            stack.className = "key-stack" + (cell.w ? " " + cell.w : "");
+
+            const topHalf = makeHalfButton({
+              label: cell.shifted,
+              kind: "top",
+              onActivate: () => feedAscii(cell.shifted),
+            });
+            const bottomHalf = makeHalfButton({
+              label: cell.label,
+              zhuyin: ZHUYIN[cell.a],
+              kind: "bottom",
+              onActivate: () => feedAscii(cell.a),
+            });
+            stack.appendChild(topHalf);
+            stack.appendChild(bottomHalf);
+            div.appendChild(stack);
+            continue;
+          }
+
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "key" + (cell.cls ? " " + cell.cls : "") + (cell.w ? " " + cell.w : "");
+          if (cell.a !== undefined) btn.dataset.ascii = cell.a;
+          if (cell.sp) btn.dataset.special = cell.sp;
+          if (cell.mod) btn.dataset.mod = cell.mod;
+          if (cell.inert) btn.dataset.inert = "1";
+          // shifted 字元在 desktop 顯示在主標題上方 (像實體鍵盤)
+          if (cell.shifted !== undefined) {
+            const shifted = document.createElement("span");
+            shifted.className = "shifted";
+            shifted.textContent = cell.shifted;
+            btn.appendChild(shifted);
+          }
+          const main = document.createElement("span");
+          main.textContent = cell.label;
+          btn.appendChild(main);
+          if (cell.sub !== undefined) {
+            const sub = document.createElement("span");
+            sub.className = "zh";
+            sub.textContent = cell.sub;
+            btn.appendChild(sub);
+          } else if (cell.a !== undefined && ZHUYIN[cell.a]) {
+            const sub = document.createElement("span");
+            sub.className = "zh";
+            sub.textContent = ZHUYIN[cell.a];
+            btn.appendChild(sub);
+          }
+          attachKeyHandlers(btn, cell);
+          div.appendChild(btn);
+        }
+        parent.appendChild(div);
+      }
+
+      function makeHalfButton({ label, zhuyin, kind, onActivate }) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "key-half " + kind;
+        const m = document.createElement("span");
+        m.textContent = label;
+        b.appendChild(m);
+        if (zhuyin) {
+          const z = document.createElement("span");
+          z.className = "zh";
+          z.textContent = zhuyin;
+          b.appendChild(z);
+        }
+        // 不呼叫 preventDefault：要保留瀏覽器原生雙點縮放偵測；
+        // 副作用 (text selection、callout) 已由 user-select: none / touch-callout 擋掉。
+        b.addEventListener("pointerdown", () => {
+          b.classList.add("pressed");
+        });
+        const release = () => b.classList.remove("pressed");
+        b.addEventListener("pointerup", release);
+        b.addEventListener("pointercancel", release);
+        b.addEventListener("pointerleave", release);
+        b.addEventListener("click", onActivate);
+        return b;
+      }
+
+      // 短按 vs 長按閾值
+      const LONG_PRESS_MS = 300;
+
+      function attachKeyHandlers(btn, cell) {
+        if (cell.inert) return;
+
+        if (cell.mod) {
+          const bit = MOD[cell.mod];
+          let downAt = 0;
+          let wasLatched = false;
+
+          const onDown = () => {
+            downAt = performance.now();
+            // 紀錄按下當下是否已 latched；用來判定這次點擊是要鎖定還是解除。
+            wasLatched = (modState.latched & bit) !== 0;
+            // 不論原本狀態，按壓期間視覺與 modifier 都當作「按住」。
+            modState.held |= bit;
+            syncModButtonsVisuals();
+          };
+          const onUp = () => {
+            const dt = performance.now() - downAt;
+            modState.held &= ~bit;
+            if (wasLatched) {
+              // 對已 latched 的 modifier 再次點按 (不論長短) → 解除鎖定。
+              modState.latched &= ~bit;
+            } else if (dt >= LONG_PRESS_MS) {
+              // 從 idle 長按 → 鎖定，放開後仍持續按住。
+              modState.latched |= bit;
+            }
+            // 從 idle 短按 → 只在按壓期間生效，鬆開即恢復 idle，不留鎖定。
+            syncModButtonsVisuals();
+          };
+          const onCancel = () => {
+            // 滑出 / cancel → 視同未鎖定地放開，不改 latched 狀態。
+            if (modState.held & bit) {
+              modState.held &= ~bit;
+              syncModButtonsVisuals();
+            }
+          };
+          btn.addEventListener("pointerdown", onDown);
+          btn.addEventListener("pointerup", onUp);
+          btn.addEventListener("pointercancel", onCancel);
+          btn.addEventListener("pointerleave", onCancel);
+          return;
+        }
+
+        // 一般字元 / special：純視覺回饋；click 才實際送字 (見下方)。
+        // 不 preventDefault — 留給瀏覽器偵測雙點縮放手勢。
+        btn.addEventListener("pointerdown", () => {
+          btn.classList.add("pressed");
+        });
+        const release = () => btn.classList.remove("pressed");
+        btn.addEventListener("pointerup", release);
+        btn.addEventListener("pointercancel", release);
+        btn.addEventListener("pointerleave", release);
+
+        btn.addEventListener("click", () => {
+          if (cell.sp) {
+            feedSpecial(cell.sp);
+          } else if (cell.a !== undefined) {
+            feedAscii(cell.a);
+          }
+        });
+      }
+
+      function feedAscii(ch) {
+        if (typeof ch !== "string" || ch.length !== 1) return;
+        let out = ch;
+        // 虛擬鍵盤按 Shift+字母 / Shift+符號時送出 shifted 字符。
+        const bits = modBits();
+        if (bits & MOD.SHIFT) {
+          if (out >= "a" && out <= "z") out = out.toUpperCase();
+          else if (SHIFT_MAP[out]) out = SHIFT_MAP[out];
+        }
+        const code = out.charCodeAt(0);
+        if (code < 0x20 || code > 0x7e) return;
+        demo.feedAscii(code, bits);
+        render();
+      }
+
+      function feedSpecial(name) {
+        if (demo.feedSpecial(name, modBits())) {
+          render();
+        }
+      }
+
+      // Settings: apply config on submit。Checkbox unchecked 不會出現在 FormData，需手動補。
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const cfg = collectFormCfg();
+        try {
+          demo.applyConfig(JSON.stringify(cfg));
+          currentCfg = cfg;
+          commitLog.textContent = "";
+          render();
+        } catch (err) {
+          alert("套用設定失敗：" + err);
+        }
+      });
+
+      function collectFormCfg() {
+        const cfg = structuredClone(DEFAULTS);
+        for (const key of Object.keys(cfg)) {
+          const el = form.elements[key];
+          if (!el) continue;
+          if (el.type === "checkbox") cfg[key] = el.checked;
+          else if (el.type === "number") cfg[key] = Number(el.value);
+          else if (el.tagName === "SELECT") cfg[key] = Number(el.value);
+          else if (el.type === "text" || el.tagName === "INPUT") cfg[key] = el.value;
+        }
+        return cfg;
+      }
+
+      function applyCfgToForm(cfg) {
+        for (const key of Object.keys(cfg)) {
+          const el = form.elements[key];
+          if (!el) continue;
+          if (el.type === "checkbox") el.checked = !!cfg[key];
+          else if (el.type === "number") el.value = String(cfg[key]);
+          else if (el.tagName === "SELECT") el.value = String(cfg[key]);
+          else if (el.type === "text") el.value = String(cfg[key] ?? "");
+        }
+        // 同步 color picker
+        form.querySelectorAll("input[type=color][data-pair]").forEach(c => {
+          const name = c.dataset.pair;
+          const v = cfg[name];
+          if (typeof v === "string") c.value = "#" + v.slice(0, 6);
+        });
+      }
+      applyCfgToForm(currentCfg);
+
+      // 設定 tab 切換
+      const tabs = document.getElementById("settings-tabs");
+      tabs.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-tab]");
+        if (!btn) return;
+        const name = btn.dataset.tab;
+        tabs.querySelectorAll("button").forEach(b => b.classList.toggle("active", b === btn));
+        form.querySelectorAll(".tab-page").forEach(p => {
+          p.classList.toggle("active", p.dataset.tab === name);
+        });
+      });
+
+      // Color picker 與 text input 雙向同步
+      form.querySelectorAll("input[type=color][data-pair]").forEach(c => {
+        c.addEventListener("input", () => {
+          const name = c.dataset.pair;
+          const text = form.elements[name];
+          if (text) {
+            const cur = text.value.slice(6) || "FF";
+            text.value = c.value.slice(1).toUpperCase() + cur;
+          }
+        });
+      });
+
+      // 「回預設值」
+      document.getElementById("reset-defaults").addEventListener("click", () => {
+        applyCfgToForm(DEFAULTS);
+      });
+
+      clearBtn.addEventListener("click", () => {
+        demo.clear();
+        render();
+      });
+
+      // Lang bar 互動
+      document.getElementById("pill-lang").addEventListener("click", () => {
+        demo.toggleLangMode();
+        showToast(demo.langMode() === "chi" ? "中文模式" : "英數模式");
+        render();
+      });
+      document.getElementById("pill-shape").addEventListener("click", () => {
+        demo.toggleShapeMode();
+        showToast(demo.shapeMode() === "full" ? "全形" : "半形");
+        render();
+      });
+      document.getElementById("pill-simp").addEventListener("click", () => {
+        demo.toggleSimpChinese();
+        showToast(demo.simpChinese() ? "輸出簡體" : "輸出繁體");
+        render();
+      });
+
+      // Win/Mac 切換
+      layoutSeg.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-layout]");
+        if (!btn) return;
+        layoutSeg.querySelectorAll("button").forEach(b => b.classList.toggle("active", b === btn));
+        // 切換時清掉 modifier latch，避免錯位視覺
+        modState.held = 0;
+        modState.latched = 0;
+        buildKeyboard(btn.dataset.layout);
+      });
+
+      // 實體鍵盤
+      const PHYSICAL_SPECIAL = new Map([
+        ["Enter", "Return"], ["Escape", "Escape"], ["Backspace", "Backspace"], ["Tab", "Tab"],
+        ["ArrowUp", "ArrowUp"], ["ArrowDown", "ArrowDown"],
+        ["ArrowLeft", "ArrowLeft"], ["ArrowRight", "ArrowRight"],
+        ["Home", "Home"], ["End", "End"], ["PageUp", "PageUp"], ["PageDown", "PageDown"],
+        ["Insert", "Insert"], ["Delete", "Delete"],
+        ["F1","F1"],["F2","F2"],["F3","F3"],["F4","F4"],["F5","F5"],["F6","F6"],
+        ["F7","F7"],["F8","F8"],["F9","F9"],["F10","F10"],["F11","F11"],["F12","F12"],
+        [" ", "Space"],
+      ]);
+      function physicalModBits(e) {
+        let b = 0;
+        if (e.shiftKey) b |= MOD.SHIFT;
+        if (e.ctrlKey)  b |= MOD.CONTROL;
+        if (e.altKey)   b |= MOD.ALT;
+        if (e.metaKey)  b |= MOD.SUPER;
+        if (e.getModifierState && e.getModifierState("CapsLock")) b |= MOD.CAPSLOCK;
+        return b;
+      }
+      window.addEventListener("keydown", (e) => {
+        if (e.target.matches("input, select, textarea, button")) return;
+
+        // 偵測 Shift 短按 (switch_lang_with_shift)
+        if (e.key === "Shift") {
+          if (!shiftDownAt) shiftDownAt = performance.now();
+          shiftAccompaniedByKey = false;
+          return;
+        }
+        if (shiftDownAt) shiftAccompaniedByKey = true;
+
+        const mapped = PHYSICAL_SPECIAL.get(e.key);
+        const mods = physicalModBits(e) | modBits();
+        if (mapped) {
+          e.preventDefault();
+          if (demo.feedSpecial(mapped, mods)) render();
+          return;
+        }
+        if (e.key.length === 1 && e.key.charCodeAt(0) >= 0x20 && e.key.charCodeAt(0) <= 0x7e) {
+          e.preventDefault();
+          demo.feedAscii(e.key.charCodeAt(0), mods);
+          render();
+        }
+      });
+
+      window.addEventListener("keyup", (e) => {
+        if (e.key !== "Shift") return;
+        const dt = performance.now() - shiftDownAt;
+        shiftDownAt = 0;
+        if (
+          !shiftAccompaniedByKey
+          && currentCfg.switch_lang_with_shift
+          && dt > 0 && dt < (currentCfg.shift_key_sensitivity || 200)
+        ) {
+          if (currentCfg.enable_caps_lock) {
+            // 桌面 IME: 當 enable_caps_lock 開啟時, Shift 只做提示, 不切換
+            showToast(demo.langMode() === "chi" ? "CapsLock 鎖定中文模式" : "CapsLock 鎖定英數模式");
+          } else {
+            demo.toggleLangMode();
+            showToast(demo.langMode() === "chi" ? "中文模式" : "英數模式");
+          }
+          render();
+        }
+      });
+
+      buildKeyboard("win");
+      render();
+    </script>
+  </body>
+</html>

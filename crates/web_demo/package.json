@@ -1,0 +1,17 @@
+{
+  "name": "elven-chewing-web-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser sandbox for the chewing engine, served from a static page over Tailscale.",
+  "type": "module",
+  "scripts": {
+    "wasm": "wasm-pack build --target web --out-dir static/pkg --dev",
+    "wasm:release": "wasm-pack build --target web --out-dir static/pkg --release",
+    "dev": "npm run wasm && vite",
+    "build": "npm run wasm:release && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}

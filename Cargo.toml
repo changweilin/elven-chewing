@@ -1,9 +1,11 @@
 [workspace]
 resolver = "3"
 members = [
+  "crates/chewing_engine_kit",
   "crates/chewing_tip_core",
   "crates/chewing_tip_host",
   "crates/tsfreg",
+  "crates/web_demo",
   "tip",
   "xtask"
 ]
