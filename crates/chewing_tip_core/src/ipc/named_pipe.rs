@@ -37,7 +37,7 @@ use windows::{
 use crate::ipc::IpcError;
 use crate::sandbox::get_user_cred;
 
-pub const NAMED_PIPE_PATH_BASE: &str = r"\\.\pipe\chewing.";
+pub const NAMED_PIPE_PATH_BASE: &str = r"\\.\pipe\elven-ime.";
 
 pub fn named_pipe_path() -> Result<String, IpcError> {
     let err = || IpcError(format!("failed to create unique user local NamedPipe path"));

@@ -191,7 +191,7 @@ impl Config {
             .options()
             .read()
             .access(KEY_WOW64_64KEY.0)
-            .open("Software\\ChewingTextService")
+            .open("Software\\ElvenIME")
             .or_raise(err)?;
         let mut cfg = ChewingTsfConfig::default();
 
@@ -366,7 +366,7 @@ impl Config {
             .create()
             .access(KEY_WOW64_64KEY.0)
             .write()
-            .open("Software\\ChewingTextService")
+            .open("Software\\ElvenIME")
         else {
             error!("Unable to open registry for write");
             return;
@@ -512,7 +512,7 @@ impl Config {
         // AppContainer app, like the SearchHost.exe powering the start menu search bar
         // needs this to access the settings.
         if let Err(error) = grant_app_container_access(
-            w!(r"CURRENT_USER\Software\ChewingTextService"),
+            w!(r"CURRENT_USER\Software\ElvenIME"),
             SE_REGISTRY_KEY,
             KEY_READ.0,
         ) {

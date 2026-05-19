@@ -88,7 +88,7 @@ dependencies = [
 
 [[package]]
 name = "chewing_tip"
-version = "26.4.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "cc",
@@ -112,7 +112,7 @@ dependencies = [
 
 [[package]]
 name = "chewing_tip_core"
-version = "26.4.1"
+version = "1.0.0"
 dependencies = [
  "chewing",
  "exn",
@@ -128,7 +128,7 @@ dependencies = [
 
 [[package]]
 name = "chewing_tip_host"
-version = "26.4.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "chewing",
@@ -1274,7 +1274,7 @@ checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
 name = "tsfreg"
-version = "26.4.1"
+version = "1.0.0"
 dependencies = [
  "chewing_tip_core",
  "serde_json",

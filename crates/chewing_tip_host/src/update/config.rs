@@ -15,7 +15,7 @@ pub(crate) struct CheckUpdateConfig {
 
 pub(crate) fn get_check_update_config() -> Result<CheckUpdateConfig, CheckUpdateError> {
     let key = CURRENT_USER
-        .create(r"Software\ChewingTextService")
+        .create(r"Software\ElvenIME")
         .boxed()?;
     let channel = match key.get_string("AutoCheckUpdateChannel") {
         Ok(ch) => ch,
@@ -31,7 +31,7 @@ pub(crate) fn get_check_update_config() -> Result<CheckUpdateConfig, CheckUpdate
 
 pub(crate) fn set_update_info_url(url: &str) -> Result<(), SetUpdateInfoError> {
     let key = CURRENT_USER
-        .create(r"Software\ChewingTextService")
+        .create(r"Software\ElvenIME")
         .boxed()?;
     if url.is_empty() {
         key.remove_value("UpdateInfoUrl").boxed()?;
@@ -48,7 +48,7 @@ pub(crate) fn set_last_update_check_time() -> Result<(), SetUpdateInfoError> {
         .map(Duration::as_secs)
         .unwrap_or_default();
     let key = CURRENT_USER
-        .create(r"Software\ChewingTextService")
+        .create(r"Software\ElvenIME")
         .boxed()?;
     key.set_u64("LastUpdateCheckTime", now).boxed()?;
     Ok(())

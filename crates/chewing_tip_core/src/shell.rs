@@ -5,7 +5,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
-use exn::{OptionExt, Result, ResultExt};
+use exn::{Result, ResultExt};
 use windows::Foundation::Uri;
 use windows::System::Launcher;
 use windows::Win32::Storage::FileSystem::{
@@ -17,7 +17,11 @@ use windows::core::{BSTR, HSTRING, PCWSTR, w};
 
 pub fn user_dir() -> Result<PathBuf, ShellError> {
     let err = || ShellError("unable to determine user dir".to_string());
-    let user_dir = chewing::path::data_dir().ok_or_raise(err)?;
+    // Independent user data location so 精靈語輸入法 and 新酷音輸入法 do not
+    // share learning dictionaries even when both are installed.
+    let user_dir = PathBuf::from(std::env::var("APPDATA").or_raise(err)?)
+        .join("ElvenIME")
+        .join("ChewingTextService");
 
     // NB: chewing might be loaded into a low mandatory integrity level process (SearchHost.exe).
     // In that case, it might not be able to check if a file exists using CreateFile
@@ -29,7 +33,7 @@ pub fn user_dir() -> Result<PathBuf, ShellError> {
     };
 
     if !user_dir_exists {
-        std::fs::create_dir(&user_dir).or_raise(err)?;
+        std::fs::create_dir_all(&user_dir).or_raise(err)?;
         let metadata = user_dir.metadata().or_raise(err)?;
         let attributes = metadata.file_attributes();
         let user_dir_w: Vec<u16> = user_dir.as_os_str().encode_wide().collect();
@@ -53,7 +57,7 @@ pub fn program_dir() -> Result<PathBuf, ShellError> {
             .or_else(|_| std::env::var("ProgramFiles(x86)"))
             .or_raise(err)?,
     )
-    .join("ChewingTextService"))
+    .join("ElvenIME"))
 }
 
 pub fn open_url(url: &str) {

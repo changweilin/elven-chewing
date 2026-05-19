@@ -52,8 +52,8 @@ END
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-101                     ICON                    "mainicon.ico"
-102                     ICON                    "mainicon2.ico"
+101                     ICON                    "elven_ime.ico"
+102                     ICON                    "elven_ime.ico"
 IDI_CHI                 ICON                    "chi.ico"
 IDI_CHI_DARK            ICON                    "chi_dark.ico"
 IDI_CONFIG              ICON                    "config.ico"
@@ -92,13 +92,13 @@ BEGIN
     BEGIN
         BLOCK "040404b0"
         BEGIN
-            VALUE "CompanyName", "Chewing"
-            VALUE "FileDescription", "新酷音輸入法"
+            VALUE "CompanyName", "ElvenIME"
+            VALUE "FileDescription", "精靈語輸入法"
             VALUE "FileVersion", VER_FILEVERSION_STR
-            VALUE "InternalName", "ChewingTextService.dll"
-            VALUE "LegalCopyright", "Copyright (C) 2013-2025"
-            VALUE "OriginalFilename", "ChewingTextService.dll"
-            VALUE "ProductName", "新酷音輸入法"
+            VALUE "InternalName", "ElvenIME.dll"
+            VALUE "LegalCopyright", "Copyright (C) 2026"
+            VALUE "OriginalFilename", "ElvenIME.dll"
+            VALUE "ProductName", "精靈語輸入法"
             VALUE "ProductVersion", VER_PRODUCTVERSION_STR
         END
     END
@@ -119,16 +119,16 @@ BEGIN
     POPUP "POPUP"
     BEGIN
         MENUITEM "安裝本地新版本 (&U)",                  ID_CHECK_NEW_VER
-        MENUITEM "關於新酷音輸入法(&A)",                ID_ABOUT
-        MENUITEM "參觀新酷音官方網站(&W)",               ID_WEBSITE
-        MENUITEM "新酷音線上討論區(&G)",                ID_GROUP
+        MENUITEM "關於精靈語輸入法(&A)",                ID_ABOUT
+        MENUITEM "參觀精靈語輸入法官方網站(&W)",         ID_WEBSITE
+        MENUITEM "精靈語輸入法線上討論區(&G)",          ID_GROUP
         MENUITEM SEPARATOR
         MENUITEM "軟體本身的建議及錯誤回報(&B)",            ID_BUGREPORT
         MENUITEM "注音及選字選詞錯誤回報 (&P)",            ID_DICT_BUGREPORT
         MENUITEM SEPARATOR
-        MENUITEM "新酷音使用說明 (&H)",                ID_CHEWING_HELP
+        MENUITEM "精靈語輸入法使用說明 (&H)",           ID_CHEWING_HELP
         MENUITEM "編輯使用者詞庫 (&E)",                 ID_HASHED
-        MENUITEM "設定新酷音輸入法(&C)",                ID_CONFIG
+        MENUITEM "設定精靈語輸入法(&C)",                ID_CONFIG
         MENUITEM SEPARATOR
         POPUP "網路辭典 (&D)"
         BEGIN
@@ -154,11 +154,11 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_CHEWING             "新酷音輸入法"
+    IDS_CHEWING             "精靈語輸入法"
     IDS_SWITCH_SHAPE        "全形/半形切換"
     IDS_SWITCH_LANG         "中文/英文切換"
     IDS_SETTINGS            "設定/工具選單"
-    IDS_CONFIG_TITLE        "設定新酷音輸入法"
+    IDS_CONFIG_TITLE        "設定精靈語輸入法"
 END
 
 #endif    // Chinese (Traditional, Taiwan) resources

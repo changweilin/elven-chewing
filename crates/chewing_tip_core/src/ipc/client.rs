@@ -53,7 +53,7 @@ impl ChewingIpcClient {
         log::error!("Failed to connect to chewing_tip_host...");
         log::error!("{error:?}");
         log::error!("Trying to launch chewing_tip_host and retry...");
-        open_url("chewing-tip-host://init");
+        open_url("elven-ime-host://init");
         for _ in 0..5 {
             thread::sleep(Duration::from_millis(100));
             let res = connect_and_attest(&pipe_path, Duration::from_millis(100));
@@ -64,7 +64,7 @@ impl ChewingIpcClient {
         log::error!("Failed to connect to chewing_tip_host...");
         log::error!("{error:?}");
         log::error!("Trying to launch chewing_tip_host and retry...");
-        open_url("chewing-tip-host://init");
+        open_url("elven-ime-host://init");
         for _ in 0..10 {
             thread::sleep(Duration::from_millis(100));
             let res = connect_and_attest(&pipe_path, Duration::from_millis(100));

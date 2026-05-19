@@ -27,11 +27,11 @@ windows::core::link!("input.dll" "system" fn InstallLayoutOrTip(psz: *const u16,
 const ILOT_INSTALL: u32 = 0x00000000;
 // const ILOT_UNINSTALL: u32 = 0x00000001;
 
-const CHEWING_TSF_CLSID: GUID = GUID::from_u128(0x13F2EF08_575C_4D8C_88E0_F67BB8052B84);
-const CHEWING_ZH_TW_PROFILE_GUID: GUID = GUID::from_u128(0xCE45F71D_CE79_41D1_967D_640B65A380E3);
-const CHEWING_ZH_CN_PROFILE_GUID: GUID = GUID::from_u128(0x9063E7CC_225E_4CEA_B7A1_2B0FB12A75CF);
+const CHEWING_TSF_CLSID: GUID = GUID::from_u128(0xDE733D27_7EEB_4C3B_9EEC_715F05B5BA85);
+const CHEWING_ZH_TW_PROFILE_GUID: GUID = GUID::from_u128(0x548A3D08_85CB_4CA4_880E_9250544F5FB8);
+const CHEWING_ZH_CN_PROFILE_GUID: GUID = GUID::from_u128(0x7A4480B4_F40C_4002_A674_243A502EF40E);
 const CHEWING_TIP_DESC: PCWSTR =
-    w!("0x0404:{13F2EF08-575C-4D8C-88E0-F67BB8052B84}{CE45F71D-CE79-41D1-967D-640B65A380E3}");
+    w!("0x0404:{DE733D27-7EEB-4C3B-9EEC-715F05B5BA85}{548A3D08-85CB-4CA4-880E-9250544F5FB8}");
 
 const CATEGORIES: [GUID; 7] = [
     GUID_TFCAT_TIP_KEYBOARD,
@@ -59,7 +59,7 @@ fn register(icon_path: String) -> Result<()> {
             &CHEWING_TSF_CLSID,
             lcid as u16,
             &CHEWING_ZH_TW_PROFILE_GUID,
-            w!("新酷音輸入法").as_wide(),
+            w!("精靈語輸入法").as_wide(),
             &pw_icon_path,
             0,
             HKL::default(),
@@ -76,7 +76,7 @@ fn register(icon_path: String) -> Result<()> {
             &CHEWING_TSF_CLSID,
             lcid as u16,
             &CHEWING_ZH_CN_PROFILE_GUID,
-            w!("新酷音输入法").as_wide(),
+            w!("精灵语输入法").as_wide(),
             &pw_icon_path,
             0,
             HKL::default(),

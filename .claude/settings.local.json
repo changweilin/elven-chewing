@@ -22,7 +22,22 @@
       "Bash(cargo build *)",
       "Bash(cargo xtask *)",
       "Bash(explorer.exe *)",
-      "Bash(powershell *)"
+      "Bash(powershell *)",
+      "PowerShell(1..4 | ForEach-Object { [guid]::NewGuid\\(\\).ToString\\(\\).ToUpper\\(\\) })",
+      "PowerShell(& python build/make_ico.py \"design/logo-concepts/elven-ime-logo-single-concept.png\" \"tip/rc/elven_ime.ico\")",
+      "Bash(reg query *)",
+      "Bash(iconv -f BIG5 -t UTF-8)",
+      "Bash(tasklist)",
+      "PowerShell(\"---\")",
+      "PowerShell(Get-Item 'C:\\\\Users\\\\user\\\\Documents\\\\app\\\\elven-chewing\\\\dist\\\\windows-chewing-tsf-unsigned.msi' -ErrorAction SilentlyContinue | Select-Object FullName, LastWriteTime, @{n='MB';e={[math]::Round\\($_.Length/1MB,2\\)}})",
+      "PowerShell(Get-Item 'C:\\\\Users\\\\user\\\\Documents\\\\app\\\\elven-chewing\\\\dist\\\\windows-chewing-tsf-unsigned.msi','C:\\\\Users\\\\user\\\\Documents\\\\app\\\\elven-chewing\\\\build\\\\installer\\\\bin\\\\Release\\\\zh-TW\\\\windows-chewing-tsf.msi' -ErrorAction SilentlyContinue | Format-Table FullName, LastWriteTime, @{n='MB';e={[math]::Round\\($_.Length/1MB,2\\)}} -Auto)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(p['source'], p['name'], p['version'], p.get\\('manifest_path',''\\)\\) for p in d['packages'] if p['name']=='chewing']\")",
+      "Bash(tee /tmp/build-installer.log)",
+      "Bash(tee /tmp/package-installer.log)",
+      "Read(//c/Program Files/Microsoft Visual Studio/2022/**)",
+      "Read(//c/Program Files \\(x86\\)/Microsoft Visual Studio/**)",
+      "Bash(\"C:/Program Files \\(x86\\)/Microsoft Visual Studio/Installer/vswhere.exe\" -latest -find MSBuild/Current/Bin/MSBuild.exe)",
+      "Bash(export PATH=\"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin:$PATH\")"
     ]
   }
 }

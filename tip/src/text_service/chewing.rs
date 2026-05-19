@@ -80,7 +80,7 @@ const GUID_MODE_BUTTON: GUID = GUID::from_u128(0xB59D51B9_B832_40D2_9A8D_5695937
 const GUID_SHAPE_TYPE_BUTTON: GUID = GUID::from_u128(0x5325DBF5_5FBE_467B_ADF0_2395BE9DD2BB);
 const GUID_SETTINGS_BUTTON: GUID = GUID::from_u128(0x4FAFA520_2104_407E_A532_9F1AAB7751CD);
 
-pub(crate) const CLSID_TEXT_SERVICE: GUID = GUID::from_u128(0x13F2EF08_575C_4D8C_88E0_F67BB8052B84);
+pub(crate) const CLSID_TEXT_SERVICE: GUID = GUID::from_u128(0xDE733D27_7EEB_4C3B_9EEC_715F05B5BA85);
 
 /// Absolute path of the MSI built by this very repo's `cargo xtask
 /// package-installer` step. The path is baked in at compile time from
@@ -1141,8 +1141,8 @@ impl ChewingTextService {
                         error!("unable to toggle lang mode: {error}");
                     }
                 }
-                ID_HASHED => open_url("chewing-editor://open"),
-                ID_CONFIG => open_url("chewing-preferences://config"),
+                ID_HASHED => open_url("elven-ime-editor://open"),
+                ID_CONFIG => open_url("elven-ime-preferences://config"),
                 ID_OUTPUT_SIMP_CHINESE => {
                     if let Err(error) = self.toggle_simp_chinese() {
                         error!("unable to toggle simplified chinese: {error}");
@@ -1167,7 +1167,7 @@ impl ChewingTextService {
                         error!("local installer not found at {}", msi.display());
                     }
                 }
-                ID_ABOUT => open_url("chewing-preferences://about"),
+                ID_ABOUT => open_url("elven-ime-preferences://about"),
                 ID_WEBSITE => open_url("https://chewing.im/"),
                 ID_GROUP => open_url("https://groups.google.com/group/chewing-devel"),
                 ID_BUGREPORT => open_url("https://codeberg.org/chewing/windows-chewing-tsf/issues"),

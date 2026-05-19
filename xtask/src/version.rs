@@ -25,10 +25,10 @@ pub(super) fn update_version(flags: UpdateVersion) -> Result<()> {
             #define VER_FILEVERSION_STR         "{yy}.{mm}.{rv}.{bn}\0"
             #define VER_PRODUCTVERSION          {yy},{mm},{rv},{bn}
             #define VER_PRODUCTVERSION_STR      "{yy}.{mm}.{rv}.{bn}\0"
-            #define ABOUT_CAPTION_WITH_VER      "關於新酷音輸入法 ({yy}.{mm}.{rv}.{bn})\0"
+            #define ABOUT_CAPTION_WITH_VER      "關於精靈語輸入法 ({yy}.{mm}.{rv}.{bn})\0"
             #define ABOUT_VERSION_STR           "版本：{yy}.{mm}.{rv}.{bn}\0"
             #define ABOUT_RELEASE_DATE_STR      "發行日期：{year} 年 {month:02} 月 {day:02} 日\0"
-            #define PREFS_TITLE_WITH_VER        "設定新酷音輸入法 ({yy}.{mm}.{rv}.{bn})\0"
+            #define PREFS_TITLE_WITH_VER        "設定精靈語輸入法 ({yy}.{mm}.{rv}.{bn})\0"
         "#
     )?;
     let mut version_json = File::create("installer/version.json")?;

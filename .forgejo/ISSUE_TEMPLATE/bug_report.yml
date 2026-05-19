@@ -1,5 +1,5 @@
 name: 問題回報 (Bug report)
-about: 回報你遇到的問題，幫助我們改善新酷音 (Create a report to help us improve)
+about: 回報你遇到的問題，幫助我們改善精靈語輸入法 (Create a report to help us improve)
 
 body:
   - type: markdown
@@ -55,7 +55,7 @@ body:
 
         重現步驟：
         1. 開啟記事本
-        2. 切換到新酷音輸入法
+        2. 切換到精靈語輸入法
         3. 輸入「hk4」
         4. 按空白鍵，選字視窗未出現
     validations:
@@ -67,7 +67,7 @@ body:
       label: 設定檔匯出 (windows-chewing-tsf config export)
       description: |
         請匯出您的設定檔並貼上內容：
-        1. 開啟「新酷音設定」
+        1. 開啟「精靈語輸入法設定」
         2. 點選「匯出設定」
         3. 將檔案內容貼上（或上傳檔案）
 
