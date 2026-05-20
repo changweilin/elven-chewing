@@ -49,13 +49,13 @@
       @media (max-width: 880px) {
         .layout {
           grid-template-columns: 1fr;
-          /* 鍵盤緊貼候選字下方 — 打字時視線不用跨過 Commit/Settings；
-             歷史輸出與設定降到底部，因為輸入過程中很少看。 */
+          /* 手機版：已提交文字緊貼候選字下方 — 注音 → 候選 → 已送出 由上而下
+             形成完整輸入歷程，視線不用跨過鍵盤。鍵盤與設定降到底部。 */
           grid-template-areas:
             "preedit"
             "candidates"
-            "keyboard"
             "commit"
+            "keyboard"
             "settings";
         }
       }
