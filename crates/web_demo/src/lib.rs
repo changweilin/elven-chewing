@@ -16,7 +16,7 @@
 //! Chinese output, ...) are interpreted in this crate, the same way
 //! `tip::text_service::chewing` does on Windows.
 
-use chewing::editor::{BasicEditor, CharacterForm, Editor, LanguageMode};
+use chewing::editor::{BasicEditor, CharacterForm, Editor, EditorKeyBehavior, LanguageMode};
 use chewing::input::KeyboardEvent;
 use chewing::input::keycode::{self, Keycode};
 use chewing::input::keysym::{self, Keysym};
@@ -193,6 +193,15 @@ pub struct ChewingDemo {
     /// Cached `output_simp_chinese`. The user-visible toggle lives on the
     /// instance so Ctrl+F12 can flip it without re-applying the whole config.
     output_simp_chinese: bool,
+    pending_key_events: Vec<KeyboardEvent>,
+    last_reconvert: Option<LastCommitSnapshot>,
+}
+
+#[derive(Debug, Clone)]
+struct LastCommitSnapshot {
+    key_events: Vec<KeyboardEvent>,
+    committed_text: String,
+    mode: LanguageMode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -240,6 +249,8 @@ impl ChewingDemo {
             cfg,
             lang_mode,
             output_simp_chinese,
+            pending_key_events: Vec::new(),
+            last_reconvert: None,
         }
     }
 
@@ -266,6 +277,7 @@ impl ChewingDemo {
     #[wasm_bindgen(js_name = clear)]
     pub fn clear(&mut self) {
         self.editor.clear();
+        self.pending_key_events.clear();
     }
 
     /// Toggle 中/英 mode. Used by the lang-bar button on the web UI;
@@ -347,7 +359,10 @@ impl ChewingDemo {
             self.editor.set_editor_options(|opt| {
                 opt.language_mode = LanguageMode::English;
             });
-            self.feed_event_with_mods(byte_to_event(out as u8), modifiers);
+            let evt = byte_to_event(out as u8);
+            self.track_key_event(evt);
+            self.feed_event_with_mods(evt, modifiers);
+            self.snapshot_commit_if_needed(LanguageMode::English);
             self.editor
                 .set_editor_options(|opt| opt.language_mode = self.lang_mode.into());
             return;
@@ -357,7 +372,10 @@ impl ChewingDemo {
         let in_english_mode = self.lang_mode == LangMode::English;
         let half_shape = self.editor.editor_options().character_form == CharacterForm::Halfwidth;
         if in_english_mode && half_shape && !self.is_selecting() {
-            self.feed_event_with_mods(byte_to_event(byte), modifiers);
+            let evt = byte_to_event(byte);
+            self.track_key_event(evt);
+            self.feed_event_with_mods(evt, modifiers);
+            self.snapshot_commit_if_needed(LanguageMode::English);
             return;
         }
 
@@ -388,6 +406,8 @@ impl ChewingDemo {
         // 選字模式: 把按下的 sel-key 對應到數字 1-9, 0.
         if self.is_selecting() {
             evt = self.map_sel_key(evt, effective_byte);
+        } else {
+            self.track_key_event(evt);
         }
 
         if momentary_english {
@@ -395,10 +415,12 @@ impl ChewingDemo {
             self.editor
                 .set_editor_options(|opt| opt.language_mode = LanguageMode::English);
             self.feed_event_with_mods(evt, modifiers);
+            self.snapshot_commit_if_needed(LanguageMode::English);
             self.editor
                 .set_editor_options(|opt| opt.language_mode = old);
         } else {
             self.feed_event_with_mods(evt, modifiers);
+            self.snapshot_commit_if_needed(self.current_language_mode());
         }
     }
 
@@ -412,6 +434,7 @@ impl ChewingDemo {
     pub fn feed_keypad(&mut self, byte: u8, modifiers: u32) {
         if let Some(evt) = keypad(byte) {
             self.feed_event_with_mods(evt, modifiers);
+            self.snapshot_commit_if_needed(self.current_language_mode());
         }
     }
 
@@ -428,7 +451,13 @@ impl ChewingDemo {
         let Some(evt) = special_event(name) else {
             return false;
         };
+        if name == "Backspace" {
+            self.pending_key_events.pop();
+        } else if !self.is_selecting() {
+            self.track_key_event(evt);
+        }
         self.feed_event_with_mods(evt, modifiers);
+        self.snapshot_commit_if_needed(self.current_language_mode());
         true
     }
 
@@ -472,6 +501,52 @@ impl ChewingDemo {
         self.maybe_simp(self.editor.display_commit().to_string())
     }
 
+    /// Clear the commit buffer after JS has appended it to the fake document.
+    #[wasm_bindgen(js_name = ackCommit)]
+    pub fn ack_commit(&mut self) {
+        self.editor.ack();
+    }
+
+    /// Swap the most recent committed span between raw English keystrokes and
+    /// the Chinese output produced by replaying those same key events.
+    ///
+    /// Returns `{"delete_chars":N,"replacement":"..."}` as JSON, or an empty
+    /// string when there is nothing safe to replace.
+    #[wasm_bindgen(js_name = reconvertLastCommit)]
+    pub fn reconvert_last_commit(&mut self) -> String {
+        let Some(last) = self.last_reconvert.take() else {
+            return String::new();
+        };
+        let replacement = match last.mode {
+            LanguageMode::English => self.simulate_chinese_from_key_events(&last.key_events),
+            LanguageMode::Chinese => Some(Self::event_text(&last.key_events)),
+        };
+        let Some(replacement) = replacement.filter(|s| !s.is_empty()) else {
+            self.last_reconvert = Some(last);
+            return String::new();
+        };
+        let delete_chars = last.committed_text.chars().count();
+        if delete_chars == 0 {
+            self.last_reconvert = Some(last);
+            return String::new();
+        }
+        let new_mode = match last.mode {
+            LanguageMode::English => LanguageMode::Chinese,
+            LanguageMode::Chinese => LanguageMode::English,
+        };
+        self.last_reconvert = Some(LastCommitSnapshot {
+            key_events: last.key_events,
+            committed_text: replacement.clone(),
+            mode: new_mode,
+        });
+        self.editor.ack();
+        serde_json::json!({
+            "delete_chars": delete_chars,
+            "replacement": replacement,
+        })
+        .to_string()
+    }
+
     /// Candidate window contents for the current page, or empty if the
     /// engine is not in a candidate-selection state.
     ///
@@ -502,10 +577,14 @@ impl ChewingDemo {
             .collect()
     }
 
-    fn feed_event_with_mods(&mut self, mut evt: KeyboardEvent, modifiers: u32) {
+    fn feed_event_with_mods(
+        &mut self,
+        mut evt: KeyboardEvent,
+        modifiers: u32,
+    ) -> EditorKeyBehavior {
         evt.state |= modifiers;
         settle_partial_syllable_before_navigation(&mut self.editor, &evt);
-        self.editor.process_keyevent(evt);
+        self.editor.process_keyevent(evt)
     }
 
     fn maybe_simp(&self, s: String) -> String {
@@ -518,6 +597,93 @@ impl ChewingDemo {
 
     fn is_selecting(&self) -> bool {
         self.editor.is_selecting()
+    }
+
+    fn track_key_event(&mut self, evt: KeyboardEvent) {
+        if Self::event_text_char(evt).is_some() {
+            self.pending_key_events.push(evt);
+        }
+    }
+
+    fn snapshot_commit_if_needed(&mut self, mode: LanguageMode) {
+        if self.editor.last_key_behavior() != EditorKeyBehavior::Commit {
+            return;
+        }
+        let committed_text = self.maybe_simp(self.editor.display_commit().to_string());
+        if committed_text.is_empty() {
+            return;
+        }
+        let key_events = std::mem::take(&mut self.pending_key_events);
+        if key_events.is_empty() {
+            return;
+        }
+        if mode == LanguageMode::English
+            && let Some(last) = self.last_reconvert.as_mut()
+            && last.mode == LanguageMode::English
+        {
+            last.key_events.extend(key_events);
+            last.committed_text.push_str(&committed_text);
+            return;
+        }
+        self.last_reconvert = Some(LastCommitSnapshot {
+            key_events,
+            committed_text,
+            mode,
+        });
+    }
+
+    fn event_text_char(evt: KeyboardEvent) -> Option<char> {
+        evt.ksym
+            .is_unicode()
+            .then(|| evt.ksym.to_unicode())
+            .filter(|c| c.is_ascii() && !c.is_ascii_control() && *c != '\0')
+    }
+
+    fn event_text(events: &[KeyboardEvent]) -> String {
+        events
+            .iter()
+            .filter_map(|&evt| Self::event_text_char(evt))
+            .collect()
+    }
+
+    fn normalize_replay_event(mut evt: KeyboardEvent) -> KeyboardEvent {
+        evt.state &= 1 << 4;
+        if evt.ksym.is_unicode() {
+            let c = evt.ksym.to_unicode();
+            if c.is_ascii_alphabetic() {
+                evt.ksym = Keysym::from(c.to_ascii_lowercase());
+            }
+        }
+        evt
+    }
+
+    fn simulate_chinese_from_key_events(&mut self, events: &[KeyboardEvent]) -> Option<String> {
+        let old_mode = self.editor.editor_options().language_mode;
+        self.editor
+            .set_editor_options(|opt| opt.language_mode = LanguageMode::Chinese);
+        self.editor.clear_syllable_editor();
+        self.editor.clear_composition_editor();
+
+        for &evt in events {
+            self.editor
+                .process_keyevent(Self::normalize_replay_event(evt));
+        }
+        let out = if self.editor.commit().is_ok() {
+            Some(self.maybe_simp(self.editor.display_commit().to_string()))
+        } else {
+            None
+        };
+
+        self.editor.ack();
+        self.editor.clear_syllable_editor();
+        self.editor.clear_composition_editor();
+        self.editor
+            .set_editor_options(|opt| opt.language_mode = old_mode);
+        out
+    }
+
+    fn current_language_mode(&self) -> LanguageMode {
+        self.lang_mode.into()
     }
 
     fn map_sel_key(&self, mut evt: KeyboardEvent, byte: u8) -> KeyboardEvent {
@@ -606,4 +772,62 @@ fn special_event(name: &str) -> Option<KeyboardEvent> {
     let mut b = KeyboardEvent::builder();
     b.code(code).ksym(ksym);
     Some(b.build())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Value;
+
+    use super::ChewingDemo;
+
+    fn drain_commit(demo: &mut ChewingDemo, out: &mut String) {
+        let committed = demo.display_commit();
+        if !committed.is_empty() {
+            out.push_str(&committed);
+            demo.ack_commit();
+        }
+    }
+
+    #[test]
+    fn reconvert_english_commit_uses_key_events() {
+        let mut demo = ChewingDemo::new();
+        demo.toggle_lang_mode();
+        let mut doc = String::new();
+
+        for byte in b"hk4" {
+            demo.feed_ascii(*byte, 0);
+            drain_commit(&mut demo, &mut doc);
+        }
+        assert_eq!("hk4", doc);
+
+        let raw = demo.reconvert_last_commit();
+        let result: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(Some(3), result["delete_chars"].as_u64());
+        let replacement = result["replacement"].as_str().unwrap();
+        assert!(!replacement.is_empty());
+        assert_ne!("hk4", replacement);
+
+        let raw = demo.reconvert_last_commit();
+        let result: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!("hk4", result["replacement"].as_str().unwrap());
+    }
+
+    #[test]
+    fn reconvert_chinese_commit_restores_raw_keys() {
+        let mut demo = ChewingDemo::new();
+        let mut doc = String::new();
+
+        for byte in b"hk4" {
+            demo.feed_ascii(*byte, 0);
+            drain_commit(&mut demo, &mut doc);
+        }
+        demo.feed_special("Return", 0);
+        drain_commit(&mut demo, &mut doc);
+        assert!(!doc.is_empty());
+        assert_ne!("hk4", doc);
+
+        let raw = demo.reconvert_last_commit();
+        let result: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!("hk4", result["replacement"].as_str().unwrap());
+    }
 }

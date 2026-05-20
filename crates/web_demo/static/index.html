@@ -1340,7 +1340,10 @@
       function render() {
         preedit.textContent = demo.display();
         const committed = demo.displayCommit();
-        if (committed) commitLog.textContent += committed;
+        if (committed) {
+          commitLog.textContent += committed;
+          demo.ackCommit();
+        }
         const list = demo.candidates();
         const selKeys = demo.selKeys();
         cands.innerHTML = "";
@@ -1721,6 +1724,10 @@
           if (out >= "a" && out <= "z") out = out.toUpperCase();
           else if (SHIFT_MAP[out]) out = SHIFT_MAP[out];
         }
+        if (isReconvertShortcutChar(ch, bits)) {
+          if (reconvertLastCommit()) syncModButtonsVisuals();
+          return;
+        }
         const code = out.charCodeAt(0);
         if (code < 0x20 || code > 0x7e) return;
         demo.feedAscii(code, bits);
@@ -1739,6 +1746,39 @@
         if (typeof ch !== "string" || ch.length !== 1) return;
         demo.feedKeypad(ch.charCodeAt(0), modBits());
         render();
+      }
+
+      function reconvertLastCommit() {
+        const raw = demo.reconvertLastCommit();
+        if (!raw) return false;
+        let result;
+        try {
+          result = JSON.parse(raw);
+        } catch (err) {
+          console.warn("reconvertLastCommit returned invalid JSON", err);
+          return false;
+        }
+        const deleteChars = Number(result.delete_chars || 0);
+        const replacement = String(result.replacement || "");
+        if (deleteChars <= 0 || !replacement) return false;
+        const chars = Array.from(commitLog.textContent);
+        chars.splice(Math.max(0, chars.length - deleteChars), deleteChars, replacement);
+        commitLog.textContent = chars.join("");
+        render();
+        return true;
+      }
+
+      function isReconvertShortcutBits(bits) {
+        return (bits & MOD.CONTROL) && !(bits & (MOD.ALT | MOD.SUPER | MOD.SHIFT));
+      }
+
+      function isReconvertShortcutChar(ch, bits) {
+        return isReconvertShortcutBits(bits) && (ch === "`" || ch === "'");
+      }
+
+      function isPhysicalReconvertShortcut(e, mods) {
+        if (!isReconvertShortcutBits(mods)) return false;
+        return e.code === "Backquote" || e.code === "Quote" || e.key === "`" || e.key === "'";
       }
 
       // 表單任何欄位變動 (含 color picker、checkbox、select) 都立即保存,
@@ -1939,6 +1979,11 @@
 
         const mapped = PHYSICAL_SPECIAL.get(e.key);
         const mods = physicalModBits(e) | modBits();
+        if (isPhysicalReconvertShortcut(e, mods)) {
+          e.preventDefault();
+          reconvertLastCommit();
+          return;
+        }
         if (mapped) {
           e.preventDefault();
           if (demo.feedSpecial(mapped, mods)) render();

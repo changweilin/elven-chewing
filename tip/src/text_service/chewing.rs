@@ -217,11 +217,11 @@ pub(super) struct CompositionString {
 /// committed text itself).
 #[derive(Debug, Clone)]
 struct LastCommitSnapshot {
-    /// Raw ASCII characters the user pressed to produce this commit.
-    keystrokes: String,
+    /// Key events the user pressed to produce this commit.
+    key_events: Vec<KeyboardEvent>,
     /// Text that was actually inserted into the document.
     committed_text: String,
-    /// The chewing language mode at commit time.
+    /// The output track that produced `committed_text`.
     mode: LanguageMode,
 }
 
@@ -256,9 +256,9 @@ pub(super) struct ChewingTextService {
     pending_edit: Weak<RefCell<CompositionString>>,
     dual_state: Option<DualState>,
     dual_preview: DualPreview,
-    /// ASCII keystrokes accumulated during the current composition session.
+    /// Key events accumulated during the current composition session.
     /// Cleared on commit (after snapshotting into `last_reconvert`) and on abort.
-    pending_keystrokes: String,
+    pending_key_events: Vec<KeyboardEvent>,
     /// Most recent commit snapshot for the reconvert-last-commit keybinding.
     last_reconvert: Option<LastCommitSnapshot>,
 }
@@ -398,7 +398,7 @@ impl ChewingTextService {
             pending_lang_mode_change: Cell::new(false),
             dual_state,
             dual_preview,
-            pending_keystrokes: String::new(),
+            pending_key_events: Vec::new(),
             last_reconvert: None,
         };
 
@@ -594,7 +594,17 @@ impl ChewingTextService {
                 {
                     // need to handle fullwidth mode switch
                     return Ok(true);
+                } else if evt.ksym == SYM_BACKSPACE {
+                    self.pop_passthrough_english();
+                    debug!("key not handled - English mode Backspace");
+                    return Ok(false);
+                } else if Self::event_text_char(evt).is_some() {
+                    self.snapshot_passthrough_english(evt);
+                    debug!("key not handled - tracked passthrough English text");
+                    return Ok(false);
                 } else {
+                    self.pending_key_events.clear();
+                    self.last_reconvert = None;
                     debug!("key not handled - in English mode");
                     return Ok(false);
                 }
@@ -650,7 +660,7 @@ impl ChewingTextService {
             self.chewing_editor.commit()?;
             self.chewing_editor.ack();
             self.insert_text(context, &text)?;
-            self.snapshot_last_commit(&text, false);
+            self.snapshot_last_commit(&text, LanguageMode::English, false);
             self.dual_on_commit();
             self.update_preedit(context, String::new())?;
             let _ = self.dual_hide_preview();
@@ -697,6 +707,8 @@ impl ChewingTextService {
             }
         }
 
+        let mut input_mode = self.current_language_mode();
+
         if text_action.is_some() {
             // do nothing, handled later
         } else if evt.ksym.is_unicode() {
@@ -735,7 +747,7 @@ impl ChewingTextService {
             // Reconvert tracking: accumulate the raw ASCII char so we can
             // replay it under the opposite language mode later.
             if !self.chewing_editor.is_selecting() {
-                self.track_keystroke(evt.ksym.to_unicode());
+                self.track_key_event(evt);
             }
             // HACK: convert sel_keys key to number key
             if self.chewing_editor.is_selecting() {
@@ -745,6 +757,7 @@ impl ChewingTextService {
                 // TODO: maybe this can be merged back to the default branch?
                 self.chewing_editor.process_keyevent(evt);
             } else if self.lang_mode.get() == LanguageMode::English || momentary_english_mode {
+                input_mode = LanguageMode::English;
                 let old_lang_mode = self.chewing_editor.editor_options().language_mode;
                 self.chewing_editor
                     .set_editor_options(|opt| opt.language_mode = LanguageMode::English);
@@ -752,6 +765,7 @@ impl ChewingTextService {
                 self.chewing_editor
                     .set_editor_options(|opt| opt.language_mode = old_lang_mode);
             } else {
+                input_mode = LanguageMode::Chinese;
                 self.chewing_editor.process_keyevent(evt);
             }
         } else {
@@ -762,7 +776,7 @@ impl ChewingTextService {
             // Reconvert tracking: keep the keystroke buffer aligned with chewing
             // on Backspace.
             if evt.ksym == SYM_BACKSPACE {
-                self.pending_keystrokes.pop();
+                self.pending_key_events.pop();
             }
             self.settle_partial_syllable_before_navigation(&evt);
             let mut key_handled = false;
@@ -852,16 +866,18 @@ impl ChewingTextService {
             let chinese_text = self.chewing_editor.display_commit().to_owned();
             self.chewing_editor.ack();
             // 雙排模式: 依 active 軌道決定送出哪一串
-            let text = match self.dual_state.as_ref() {
-                Some(ds) if ds.active == DualTrack::English => ds.raw_english.clone(),
-                _ => chinese_text,
+            let (text, commit_mode) = match self.dual_state.as_ref() {
+                Some(ds) if ds.active == DualTrack::English => {
+                    (ds.raw_english.clone(), LanguageMode::English)
+                }
+                _ => (chinese_text, input_mode),
             };
             debug!(text; "commit string");
             self.insert_text(context, &text)?;
             if let Some(param) = text_action.as_deref() {
                 self.insert_text(context, param)?;
             }
-            self.snapshot_last_commit(&text, text_action.is_some());
+            self.snapshot_last_commit(&text, commit_mode, text_action.is_some());
             self.dual_on_commit();
             let _ = self.dual_hide_preview();
             debug!("commit string ok");
@@ -875,14 +891,16 @@ impl ChewingTextService {
         let commit = if last_behavior == EditorKeyBehavior::Commit {
             let chinese_commit = self.chewing_editor.display_commit().to_owned();
             self.chewing_editor.ack();
-            let mut commit = match self.dual_state.as_ref() {
-                Some(ds) if ds.active == DualTrack::English => ds.raw_english.clone(),
-                _ => chinese_commit,
+            let (mut commit, commit_mode) = match self.dual_state.as_ref() {
+                Some(ds) if ds.active == DualTrack::English => {
+                    (ds.raw_english.clone(), LanguageMode::English)
+                }
+                _ => (chinese_commit, input_mode),
             };
             if let Some(param) = text_action.as_deref() {
                 commit.push_str(param);
             }
-            self.snapshot_last_commit(&commit, text_action.is_some());
+            self.snapshot_last_commit(&commit, commit_mode, text_action.is_some());
             // 雙排 commit 完成 → 記錄 last_committed + 重置 buffer
             self.dual_on_commit();
             commit
@@ -1034,6 +1052,7 @@ impl ChewingTextService {
         }
         editor.clear_syllable_editor();
         editor.clear_composition_editor();
+        self.pending_key_events.clear();
         self.pending_edit = Weak::new();
         self.composition.replace(None);
         // 雙排模式: composition 結束時清 buffer (保留 last_committed)
@@ -1073,11 +1092,13 @@ impl ChewingTextService {
                 let chinese_commit = self.chewing_editor.display_commit().to_owned();
                 self.chewing_editor.ack();
                 // 雙排模式: active=English 時改送 raw_english
-                let commit = match self.dual_state.as_ref() {
-                    Some(ds) if ds.active == DualTrack::English => ds.raw_english.clone(),
-                    _ => chinese_commit,
+                let (commit, commit_mode) = match self.dual_state.as_ref() {
+                    Some(ds) if ds.active == DualTrack::English => {
+                        (ds.raw_english.clone(), LanguageMode::English)
+                    }
+                    _ => (chinese_commit, self.current_language_mode()),
                 };
-                self.snapshot_last_commit(&commit, false);
+                self.snapshot_last_commit(&commit, commit_mode, false);
                 self.dual_on_commit();
                 debug!(commit; "commit string");
                 unsafe {
@@ -1377,36 +1398,103 @@ impl ChewingTextService {
         }
     }
 
-    /// Reconvert tracking: record an ASCII printable char into
-    /// `pending_keystrokes` so we can replay it later.
-    fn track_keystroke(&mut self, c: char) {
-        if c.is_ascii() && !c.is_ascii_control() && c != '\0' {
-            self.pending_keystrokes.push(c);
+    /// Reconvert tracking: record a printable key event into
+    /// `pending_key_events` so we can replay it later.
+    fn track_key_event(&mut self, evt: KeyboardEvent) {
+        if Self::event_text_char(evt).is_some() {
+            self.pending_key_events.push(evt);
         }
     }
 
-    /// Reconvert tracking: capture the current committed text + the keystrokes
+    /// Reconvert tracking: capture the current committed text + the key events
     /// that produced it. `had_text_action` skips the snapshot for `text:...`
     /// keybind commits where the inserted glyphs do not correspond to any
     /// keystrokes the user pressed.
-    fn snapshot_last_commit(&mut self, committed_text: &str, had_text_action: bool) {
+    fn snapshot_last_commit(
+        &mut self,
+        committed_text: &str,
+        mode: LanguageMode,
+        had_text_action: bool,
+    ) {
         if had_text_action {
-            self.pending_keystrokes.clear();
+            self.pending_key_events.clear();
             return;
         }
-        let keystrokes = mem::take(&mut self.pending_keystrokes);
-        if committed_text.is_empty() || keystrokes.is_empty() {
+        let key_events = mem::take(&mut self.pending_key_events);
+        if committed_text.is_empty() || key_events.is_empty() {
             return;
         }
-        let mode = match self.lang_mode.get() {
-            TsfLangMode::Chinese | TsfLangMode::DisabledChinese => LanguageMode::Chinese,
-            TsfLangMode::English | TsfLangMode::DisabledEnglish => LanguageMode::English,
-        };
         self.last_reconvert = Some(LastCommitSnapshot {
-            keystrokes,
+            key_events,
             committed_text: committed_text.to_owned(),
             mode,
         });
+    }
+
+    /// Reconvert tracking for pure English mode. In that mode we deliberately
+    /// let the application insert text itself, so there is no later IME commit
+    /// callback where we can snapshot the sequence.
+    fn snapshot_passthrough_english(&mut self, evt: KeyboardEvent) {
+        let Some(c) = Self::event_text_char(evt) else {
+            return;
+        };
+        match self.last_reconvert.as_mut() {
+            Some(last) if last.mode == LanguageMode::English => {
+                last.key_events.push(evt);
+                last.committed_text.push(c);
+            }
+            _ => {
+                self.last_reconvert = Some(LastCommitSnapshot {
+                    key_events: vec![evt],
+                    committed_text: c.to_string(),
+                    mode: LanguageMode::English,
+                });
+            }
+        }
+    }
+
+    fn pop_passthrough_english(&mut self) {
+        if let Some(last) = self.last_reconvert.as_mut()
+            && last.mode == LanguageMode::English
+        {
+            last.key_events.pop();
+            last.committed_text.pop();
+            if last.key_events.is_empty() || last.committed_text.is_empty() {
+                self.last_reconvert = None;
+            }
+        }
+    }
+
+    fn event_text_char(evt: KeyboardEvent) -> Option<char> {
+        evt.ksym
+            .is_unicode()
+            .then(|| evt.ksym.to_unicode())
+            .filter(|c| c.is_ascii() && !c.is_ascii_control() && *c != '\0')
+    }
+
+    fn event_text(events: &[KeyboardEvent]) -> String {
+        events
+            .iter()
+            .filter_map(|&evt| Self::event_text_char(evt))
+            .collect()
+    }
+
+    fn normalize_replay_event(mut evt: KeyboardEvent) -> KeyboardEvent {
+        evt.state &= KeyState::NumLock as u32;
+        if evt.ksym.is_unicode() {
+            let c = evt.ksym.to_unicode();
+            if c.is_ascii_alphabetic() {
+                evt.ksym = Keysym::from(c.to_ascii_lowercase());
+            }
+        }
+        evt
+    }
+
+    fn current_language_mode(&self) -> LanguageMode {
+        match self.lang_mode.get() {
+            TsfLangMode::Chinese | TsfLangMode::DisabledChinese => LanguageMode::Chinese,
+            TsfLangMode::English | TsfLangMode::DisabledEnglish => LanguageMode::English,
+        }
     }
 
     /// Handle the reconvert-last-commit keybinding (default: Ctrl+`).
@@ -1423,8 +1511,8 @@ impl ChewingTextService {
             return Ok(());
         };
         let replacement = match last.mode {
-            LanguageMode::English => self.simulate_chinese_from_keystrokes(&last.keystrokes)?,
-            LanguageMode::Chinese => last.keystrokes.clone(),
+            LanguageMode::English => self.simulate_chinese_from_key_events(&last.key_events)?,
+            LanguageMode::Chinese => Self::event_text(&last.key_events),
         };
         if replacement.is_empty() {
             debug!("reconvert: replacement empty, restoring snapshot");
@@ -1457,43 +1545,42 @@ impl ChewingTextService {
             LanguageMode::Chinese => LanguageMode::English,
         };
         self.last_reconvert = Some(LastCommitSnapshot {
-            keystrokes: last.keystrokes,
+            key_events: last.key_events,
             committed_text: replacement,
             mode: new_mode,
         });
         Ok(())
     }
 
-    /// Replay `keystrokes` through the chewing engine in Chinese mode to get
+    /// Replay key events through the chewing engine in Chinese mode to get
     /// the bopomofo-composed text. Requires `!self.is_composing()` so the
     /// editor state is clean.
-    fn simulate_chinese_from_keystrokes(&mut self, keystrokes: &str) -> Result<String> {
+    fn simulate_chinese_from_key_events(&mut self, events: &[KeyboardEvent]) -> Result<String> {
         let old_mode = self.chewing_editor.editor_options().language_mode;
         self.chewing_editor
             .set_editor_options(|opt| opt.language_mode = LanguageMode::Chinese);
         self.chewing_editor.clear_syllable_editor();
 
-        for c in keystrokes.chars() {
-            if !c.is_ascii() || c.is_ascii_control() {
-                continue;
-            }
-            let evt = KeyboardEvent::builder()
-                .ksym(Keysym::from(c.to_ascii_lowercase()))
-                .build();
-            self.chewing_editor.process_keyevent(evt);
+        for &evt in events {
+            self.chewing_editor
+                .process_keyevent(Self::normalize_replay_event(evt));
         }
-        self.chewing_editor.commit()?;
-        let mut out = self.chewing_editor.display_commit().to_owned();
+        let result = (|| {
+            self.chewing_editor.commit()?;
+            let mut out = self.chewing_editor.display_commit().to_owned();
+            if self.output_simp_chinese {
+                out = zhconv(&out, Variant::ZhHans);
+            }
+            Ok(out)
+        })();
+
         self.chewing_editor.ack();
         self.chewing_editor.clear_syllable_editor();
-
-        if self.output_simp_chinese {
-            out = zhconv(&out, Variant::ZhHans);
-        }
+        self.chewing_editor.clear_composition_editor();
 
         self.chewing_editor
             .set_editor_options(|opt| opt.language_mode = old_mode);
-        Ok(out)
+        result
     }
 
     /// 雙排模式: 餵入一個 ASCII 字元到英文軌
