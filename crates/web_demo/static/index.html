@@ -370,39 +370,39 @@
   </head>
   <body>
     <header>
-      <h1>精靈語輸入法 — Web Sandbox</h1>
+      <h1>精靈語輸入法 — 網頁沙盒</h1>
       <p class="subtitle">
-        純引擎預覽，跑在 WebAssembly 上；實體鍵盤可用，下方虛擬鍵盤主要供觸控、展示與非打字者使用。
-        TSF、候選字視窗、IPC 不在此沙盒範圍——詳見
-        <code>design/ci-self-hosted-runner.md</code> 的 Windows 整合說明。
+        純引擎預覽，跑在 WebAssembly 上；可用實體鍵盤直接輸入，下方虛擬鍵盤主要供觸控、展示與非打字者使用。
+        文字服務 (TSF)、候選字視窗、跨程序 IPC 不在此沙盒範圍，詳見
+        <code>design/ci-self-hosted-runner.md</code> 中的 Windows 整合說明。
       </p>
     </header>
 
     <div class="layout">
       <section class="panel area-preedit">
-        <h2>輸入預覽 Preedit</h2>
+        <h2>輸入預覽</h2>
         <div class="lang-bar" id="lang-bar">
           <span>輸入法狀態</span>
-          <span class="pill" id="pill-lang" title="點按切換中/英">中</span>
-          <span class="pill" id="pill-shape" title="點按切換全/半">半</span>
-          <span class="pill" id="pill-simp" data-on="0" title="Ctrl+F12 或點按切換">簡</span>
+          <span class="pill" id="pill-lang" title="點按切換 中文 / 英數">中</span>
+          <span class="pill" id="pill-shape" title="點按切換 全形 / 半形">半</span>
+          <span class="pill" id="pill-simp" data-on="0" title="點按或 Ctrl+F12 切換 繁體 / 簡體 輸出">簡</span>
           <span class="toast" id="toast"></span>
         </div>
         <div id="preedit" class="preedit"></div>
       </section>
 
       <section class="panel area-candidates">
-        <h2>候選字 Candidates</h2>
+        <h2>候選字</h2>
         <div id="candidates" class="candidates"></div>
       </section>
 
       <section class="panel area-commit">
-        <h2>已提交文字 Committed</h2>
+        <h2>已提交文字</h2>
         <div id="commit-log" class="commit-log"></div>
       </section>
 
       <section class="panel settings area-settings">
-        <h2>引擎設定 Engine Settings</h2>
+        <h2>引擎設定</h2>
         <div class="settings-tabs" id="settings-tabs">
           <button type="button" data-tab="typing" class="active">輸入</button>
           <button type="button" data-tab="cand">選字</button>
@@ -417,51 +417,57 @@
             <div class="row">
               <label for="conv">轉換引擎</label>
               <select id="conv" name="conv_engine">
-                <option value="0">Simple</option>
-                <option value="1">Chewing（預設）</option>
-                <option value="2">Fuzzy</option>
+                <option value="0">簡單選詞</option>
+                <option value="1">智慧選詞（預設）</option>
+                <option value="2">模糊智慧選詞</option>
               </select>
             </div>
+            <div class="row note">智慧選詞會依詞頻統計挑詞；模糊智慧選詞在此之上允許部分音節與聲母前綴匹配。</div>
             <div class="row">
-              <label for="partial">部分音節匹配</label>
+              <label for="partial">模糊注音猜詞</label>
               <input id="partial" name="partial_syllable_match" type="checkbox" />
             </div>
-            <div class="row note">模糊注音猜詞 (聲母/前幾碼)。會自動切換為 Fuzzy 引擎。</div>
+            <div class="row note">
+              允許以聲母或前幾碼猜詞；即使引擎選了智慧選詞，勾選此項也會自動升級為模糊智慧選詞。
+              <br>
+              <strong>使用方式：</strong>打完不完整的注音 (例如僅輸入聲母「ㄘ」) 後，按 <kbd>↓</kbd> (Down arrow)
+              觸發候選字；空白鍵與其他鍵都不會啟動模糊查詢——這是 libchewing 引擎本身的設計，桌面版與沙盒一致。
+            </div>
 
             <div class="row">
-              <label for="autolearn">啟用自動學習</label>
+              <label for="autolearn">啟用自動學詞</label>
               <input id="autolearn" name="enable_auto_learn" type="checkbox" checked />
             </div>
             <div class="row">
               <label for="addfwd">向前加詞</label>
               <input id="addfwd" name="add_phrase_forward" type="checkbox" checked />
             </div>
-            <div class="row note">取消勾選即「向後加詞」。影響 Ctrl+數字 加片語的方向。</div>
+            <div class="row note">取消勾選即改為「向後加詞」，影響 Ctrl+數字 加片語時的方向。</div>
 
             <div class="row">
-              <label for="easyshift">Shift+符號 易符號</label>
+              <label for="easyshift">Shift＋符號 輸出特殊符號</label>
               <input id="easyshift" name="easy_symbols_with_shift" type="checkbox" checked />
             </div>
             <div class="row">
-              <label for="easyshiftctrl">Ctrl+Shift+符號 易符號</label>
+              <label for="easyshiftctrl">Ctrl＋Shift＋符號 輸出特殊符號</label>
               <input id="easyshiftctrl" name="easy_symbols_with_shift_ctrl" type="checkbox" />
             </div>
 
             <div class="row">
-              <label for="fullsym">Shift+符號 輸出全形</label>
+              <label for="fullsym">Shift＋符號 輸出全形符號</label>
               <input id="fullsym" name="full_shape_symbols" type="checkbox" checked />
             </div>
             <div class="row">
-              <label for="upper">Shift+字母 暫態英大寫</label>
+              <label for="upper">Shift＋字母 暫態切英文大寫</label>
               <input id="upper" name="upper_case_with_shift" type="checkbox" />
             </div>
 
             <div class="row">
-              <label for="fwtoggle">Shift+Space 切換全/半形</label>
+              <label for="fwtoggle">Shift＋空白鍵 切換全形 / 半形</label>
               <input id="fwtoggle" name="enable_fullwidth_toggle_key" type="checkbox" />
             </div>
             <div class="row">
-              <label for="esc">Esc 清空緩衝</label>
+              <label for="esc">Esc 鍵清空輸入緩衝</label>
               <input id="esc" name="esc_clean_all_buf" type="checkbox" />
             </div>
           </div>
@@ -513,40 +519,40 @@
           <!-- ===== Tab: 語言 ===== -->
           <div class="tab-page" data-tab="lang">
             <div class="row">
-              <label for="def-eng">預設英數模式</label>
+              <label for="def-eng">預設為英數模式</label>
               <input id="def-eng" name="default_english" type="checkbox" />
             </div>
             <div class="row">
-              <label for="def-full">預設全形</label>
+              <label for="def-full">預設為全形模式</label>
               <input id="def-full" name="default_full_space" type="checkbox" />
             </div>
             <div class="row">
-              <label for="simp">輸出簡體中文</label>
+              <label for="simp">輸出為簡體中文</label>
               <input id="simp" name="output_simp_chinese" type="checkbox" />
             </div>
-            <div class="row note">使用 zhconv 即時轉換預覽/送出/候選字內容。</div>
+            <div class="row note">會即時將預覽、送出、候選字內容轉成簡體中文。</div>
             <div class="row">
-              <label for="switch-shift">Shift 切換中/英</label>
+              <label for="switch-shift">Shift 鍵切換 中文 / 英數</label>
               <input id="switch-shift" name="switch_lang_with_shift" type="checkbox" checked />
             </div>
             <div class="row">
-              <label for="shift-sens">Shift 短按判定 (ms)</label>
+              <label for="shift-sens">Shift 短按判定（毫秒）</label>
               <input id="shift-sens" name="shift_key_sensitivity" type="number" min="50" max="1000" step="10" value="200" />
             </div>
             <div class="row">
-              <label for="caps">啟用 CapsLock 切換</label>
+              <label for="caps">以大寫鎖定鍵切換中英</label>
               <input id="caps" name="enable_caps_lock" type="checkbox" />
             </div>
             <div class="row">
-              <label for="caps-chi">CapsLock 鎖中文</label>
+              <label for="caps-chi">大寫鎖定時鎖在中文模式</label>
               <input id="caps-chi" name="lock_chinese_on_caps_lock" type="checkbox" checked />
             </div>
-            <div class="row note">關閉時 CapsLock 改為單純切大/小寫英文。</div>
+            <div class="row note">取消勾選則改為純粹切換英文大小寫。</div>
             <div class="row">
-              <label for="sync-mode">開關時同步語言狀態</label>
+              <label for="sync-mode">隨輸入框開關同步語言狀態</label>
               <input id="sync-mode" name="sync_lang_mode_openclose" type="checkbox" />
             </div>
-            <div class="row note">桌面 IME 行為:於每個文件開關時記錄/還原 中英模式。Web 沙盒僅作為設定持久化。</div>
+            <div class="row note">桌面版會在每個文件開關時記錄與還原 中文 / 英數 模式；網頁沙盒僅作為設定保存。</div>
           </div>
 
           <!-- ===== Tab: 鍵盤 ===== -->
@@ -554,108 +560,108 @@
             <div class="row">
               <label for="kb">注音鍵盤配置</label>
               <select id="kb" name="keyboard_layout">
-                <option value="0">標準（預設）</option>
-                <option value="1">許氏 Hsu</option>
-                <option value="2">IBM</option>
-                <option value="3">精業 Gin-Yieh</option>
-                <option value="4">倚天 Eten</option>
-                <option value="5">倚天 26</option>
-                <option value="6">Dvorak</option>
-                <option value="7">Dvorak-Hsu</option>
-                <option value="8">大千 26</option>
+                <option value="0">標準注音（預設）</option>
+                <option value="1">許氏鍵盤</option>
+                <option value="2">IBM 鍵盤</option>
+                <option value="3">精業鍵盤</option>
+                <option value="4">倚天鍵盤</option>
+                <option value="5">倚天 26 鍵</option>
+                <option value="6">標準注音於 Dvorak 鍵盤</option>
+                <option value="7">許氏鍵盤於 Dvorak 鍵盤</option>
+                <option value="8">大千 26 鍵</option>
                 <option value="9">漢語拼音</option>
                 <option value="10">通用拼音</option>
                 <option value="11">MPS2 拼音</option>
-                <option value="12">Carpalx</option>
-                <option value="13">Colemak-DH ANSI</option>
-                <option value="14">Colemak-DH ortho</option>
-                <option value="15">Workman</option>
-                <option value="16">Colemak</option>
+                <option value="12">標準注音於 Carpalx 鍵盤</option>
+                <option value="13">標準注音於 Colemak-DH ANSI 鍵盤</option>
+                <option value="14">標準注音於 Colemak-DH 正交鍵盤</option>
+                <option value="15">標準注音於 Workman 鍵盤</option>
+                <option value="16">標準注音於 Colemak 鍵盤</option>
               </select>
             </div>
             <div class="row">
-              <label for="simul">英數模擬鍵盤</label>
+              <label for="simul">英數鍵盤模擬</label>
               <select id="simul" name="simulate_english_layout">
-                <option value="0">QWERTY（預設）</option>
-                <option value="1">Dvorak</option>
-                <option value="2">QGMLWY (Carpalx)</option>
-                <option value="3">Colemak</option>
-                <option value="4">Colemak-DH ANSI</option>
-                <option value="5">Colemak-DH ortho</option>
-                <option value="6">Workman</option>
+                <option value="0">標準 QWERTY（預設）</option>
+                <option value="1">Dvorak 反向映射</option>
+                <option value="2">Carpalx 反向映射</option>
+                <option value="3">Colemak 反向映射</option>
+                <option value="4">Colemak-DH ANSI 反向映射</option>
+                <option value="5">Colemak-DH 正交反向映射</option>
+                <option value="6">Workman 反向映射</option>
               </select>
             </div>
-            <div class="row note">桌面 IME 行為:英文模式時把實體 Dvorak/Colemak... 反向映射回 QWERTY。Web 沙盒由瀏覽器接管布局,此設定僅儲存,不重新映射輸入。</div>
+            <div class="row note">桌面版用於英數模式時，把實體 Dvorak、Colemak 等鍵盤反向映射回 QWERTY；網頁沙盒因瀏覽器已接管鍵盤布局，此設定僅作保存，不會重新映射輸入。</div>
           </div>
 
           <!-- ===== Tab: 外觀 ===== -->
           <div class="tab-page" data-tab="ui">
             <div class="row">
-              <label for="fontsize">字體大小</label>
+              <label for="fontsize">字型大小</label>
               <input id="fontsize" name="font_size" type="number" min="10" max="48" value="16" />
             </div>
             <div class="row">
-              <label for="fontfamily">字型</label>
+              <label for="fontfamily">字型名稱</label>
               <input id="fontfamily" name="font_family" type="text" value="Segoe UI" />
             </div>
             <div class="row">
-              <label for="fg">文字色 (RRGGBBAA)</label>
+              <label for="fg">文字顏色（RRGGBBAA）</label>
               <div class="color-cell">
                 <input type="color" data-pair="font_fg_color" />
                 <input id="fg" name="font_fg_color" type="text" value="000000FF" />
               </div>
             </div>
             <div class="row">
-              <label for="bg">背景色</label>
+              <label for="bg">背景顏色</label>
               <div class="color-cell">
                 <input type="color" data-pair="font_bg_color" />
                 <input id="bg" name="font_bg_color" type="text" value="FAFAFAFF" />
               </div>
             </div>
             <div class="row">
-              <label for="hifg">高亮文字色</label>
+              <label for="hifg">選取項目文字顏色</label>
               <div class="color-cell">
                 <input type="color" data-pair="font_highlight_fg_color" />
                 <input id="hifg" name="font_highlight_fg_color" type="text" value="FFFFFFFF" />
               </div>
             </div>
             <div class="row">
-              <label for="hibg">高亮背景色</label>
+              <label for="hibg">選取項目背景顏色</label>
               <div class="color-cell">
                 <input type="color" data-pair="font_highlight_bg_color" />
                 <input id="hibg" name="font_highlight_bg_color" type="text" value="000000FF" />
               </div>
             </div>
             <div class="row">
-              <label for="numfg">選字鍵色</label>
+              <label for="numfg">選字鍵顏色</label>
               <div class="color-cell">
                 <input type="color" data-pair="font_number_fg_color" />
                 <input id="numfg" name="font_number_fg_color" type="text" value="0000FFFF" />
               </div>
             </div>
             <div class="row">
-              <label for="border">選字邊框色</label>
+              <label for="border">候選字邊框顏色</label>
               <div class="color-cell">
                 <input type="color" data-pair="cand_list_border_color" />
                 <input id="border" name="cand_list_border_color" type="text" value="D6D9DBFF" />
               </div>
             </div>
             <div class="row">
-              <label for="nfg">通知文字色</label>
+              <label for="nfg">通知文字顏色</label>
               <div class="color-cell">
                 <input type="color" data-pair="notify_fg_color" />
                 <input id="nfg" name="notify_fg_color" type="text" value="000000FF" />
               </div>
             </div>
             <div class="row">
-              <label for="nbg">通知背景色</label>
+              <label for="nbg">通知背景顏色</label>
               <div class="color-cell">
                 <input type="color" data-pair="notify_bg_color" />
                 <input id="nbg" name="notify_bg_color" type="text" value="FCFBDAFF" />
               </div>
             </div>
             <div class="row">
-              <label for="nborder">通知邊框色</label>
+              <label for="nborder">通知邊框顏色</label>
               <div class="color-cell">
                 <input type="color" data-pair="notify_border_color" />
                 <input id="nborder" name="notify_border_color" type="text" value="D6D9DBFF" />
@@ -669,13 +675,13 @@
               <label for="show-notify">顯示模式變更通知</label>
               <input id="show-notify" name="show_notification" type="checkbox" checked />
             </div>
-            <div class="row note">桌面 IME 切中英/簡繁時的浮動氣球;Web 改用畫面上方 lang bar 短暫提示。</div>
+            <div class="row note">桌面版會在切換 中文 / 英數 或 繁體 / 簡體 時顯示浮動氣球；網頁沙盒改用上方狀態列短暫提示。</div>
           </div>
 
           <div class="actions">
-            <button type="submit" class="btn primary">套用並重置</button>
-            <button type="button" class="btn" id="clear-buffer">清空緩衝</button>
-            <button type="button" class="btn" id="reset-defaults">回預設值</button>
+            <button type="submit" class="btn primary">套用並重設</button>
+            <button type="button" class="btn" id="clear-buffer">清空輸入緩衝</button>
+            <button type="button" class="btn" id="reset-defaults">恢復預設值</button>
           </div>
         </form>
       </section>
@@ -684,11 +690,11 @@
         <div class="kb-toolbar">
           <span>虛擬鍵盤</span>
           <div class="seg" id="layout-seg">
-            <button type="button" data-layout="win" class="active">Windows</button>
-            <button type="button" data-layout="mac">Mac</button>
+            <button type="button" data-layout="win" class="active">Windows 配置</button>
+            <button type="button" data-layout="mac">Mac 配置</button>
           </div>
           <span class="kb-hint">
-            短按 = 跟實體鍵盤一樣，僅在按壓期間生效；長按 = 持續鎖定，再點一次即放開。
+            短按＝與實體鍵盤相同，僅在按壓期間生效；長按＝持續鎖定，再點一次即放開。
           </span>
         </div>
         <div class="kb-wrap" id="virtual-keyboard"></div>
@@ -707,6 +713,41 @@
       // 用來測試 Shift 短按 (switch_lang_with_shift)
       let shiftDownAt = 0;
       let shiftAccompaniedByKey = false;
+
+      // === localStorage 持久化 ===
+      // 引擎設定、語言列狀態 (中/英、全/半、繁/簡)、虛擬鍵盤配置 (Win/Mac)
+      // 都會被記住,重新整理後還原。版本後綴 v1 用於未來欄位不相容時棄用舊資料。
+      const STORAGE_KEY = "elven-chewing-web-demo:v1";
+      function loadPersisted() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          return raw ? JSON.parse(raw) : null;
+        } catch { return null; }
+      }
+      function persist() {
+        try {
+          // 保存「表單目前的值」而非已套用的 currentCfg,這樣即使使用者
+          // 改了設定但還沒按「套用並重設」,重新整理後一樣會記得並自動套用。
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            cfg: collectFormCfg(),
+            runtime: {
+              lang: demo.langMode(),
+              shape: demo.shapeMode(),
+              simp: demo.simpChinese(),
+              layout,
+            },
+          }));
+        } catch {}
+      }
+      // 透過 render() 走的 toggle (Ctrl+F12、Shift 短按) 也需要持久化,
+      // 但 render 每次按鍵都會跑,所以只在實際變動時寫入。
+      let lastRuntimeSig = "";
+      function persistIfRuntimeChanged() {
+        const sig = `${demo.langMode()}|${demo.shapeMode()}|${demo.simpChinese()}|${layout}`;
+        if (sig === lastRuntimeSig) return;
+        lastRuntimeSig = sig;
+        persist();
+      }
 
       // --- 標準注音映射（供虛擬鍵盤下排顯示對應符號） ---
       const ZHUYIN = {
@@ -845,7 +886,7 @@
             { mod: "CONTROL", label: "control", w: "w125", cls: "special" },
             { mod: "ALT",     label: "option",  w: "w125", cls: "special" },
             { mod: "SUPER",   label: "command", w: "w125", cls: "special" },
-            { a: " ", label: "", sub: "空白 / Space", w: "w575" },
+            { a: " ", label: "", sub: "空白鍵", w: "w575" },
             { mod: "SUPER",   label: "command", w: "w125", cls: "special" },
             { mod: "ALT",     label: "option",  w: "w125", cls: "special" },
           );
@@ -948,6 +989,7 @@
           cands.appendChild(grid);
         }
         refreshLangBar();
+        persistIfRuntimeChanged();
       }
 
       function applyCandStyle(node, highlight) {
@@ -1246,6 +1288,11 @@
         }
       }
 
+      // 表單任何欄位變動 (含 color picker、checkbox、select) 都立即保存,
+      // 不必按「套用並重設」。color/checkbox/select 的事件會冒泡到 form。
+      form.addEventListener("input", persist);
+      form.addEventListener("change", persist);
+
       // Settings: apply config on submit。Checkbox unchecked 不會出現在 FormData，需手動補。
       form.addEventListener("submit", (e) => {
         e.preventDefault();
@@ -1254,6 +1301,7 @@
           demo.applyConfig(JSON.stringify(cfg));
           currentCfg = cfg;
           commitLog.textContent = "";
+          persist();
           render();
         } catch (err) {
           alert("套用設定失敗：" + err);
@@ -1289,6 +1337,40 @@
           if (typeof v === "string") c.value = "#" + v.slice(0, 6);
         });
       }
+      // 還原上次保存的設定 / 狀態 (若有)。先套用 cfg、再對齊語言列與鍵盤配置。
+      (function restorePersisted() {
+        const saved = loadPersisted();
+        if (!saved) return;
+        if (saved.cfg && typeof saved.cfg === "object") {
+          const merged = structuredClone(DEFAULTS);
+          for (const k of Object.keys(DEFAULTS)) {
+            if (k in saved.cfg) merged[k] = saved.cfg[k];
+          }
+          try {
+            demo.applyConfig(JSON.stringify(merged));
+            currentCfg = merged;
+          } catch (err) {
+            console.warn("還原設定失敗,改用預設值", err);
+            currentCfg = structuredClone(DEFAULTS);
+          }
+        }
+        const rt = saved.runtime;
+        if (rt) {
+          // applyConfig 後 demo 的狀態來自 default_english / default_full_space /
+          // output_simp_chinese;若上次的執行期狀態不同,逐一 toggle 對齊。
+          if (rt.lang && rt.lang !== demo.langMode()) demo.toggleLangMode();
+          if (rt.shape && rt.shape !== demo.shapeMode()) demo.toggleShapeMode();
+          if (typeof rt.simp === "boolean" && rt.simp !== demo.simpChinese()) {
+            demo.toggleSimpChinese();
+          }
+          if (rt.layout === "win" || rt.layout === "mac") {
+            layout = rt.layout;
+            layoutSeg.querySelectorAll("button").forEach(b =>
+              b.classList.toggle("active", b.dataset.layout === layout));
+          }
+        }
+      })();
+
       applyCfgToForm(currentCfg);
 
       // 設定 tab 切換
@@ -1333,12 +1415,12 @@
       });
       document.getElementById("pill-shape").addEventListener("click", () => {
         demo.toggleShapeMode();
-        showToast(demo.shapeMode() === "full" ? "全形" : "半形");
+        showToast(demo.shapeMode() === "full" ? "全形模式" : "半形模式");
         render();
       });
       document.getElementById("pill-simp").addEventListener("click", () => {
         demo.toggleSimpChinese();
-        showToast(demo.simpChinese() ? "輸出簡體" : "輸出繁體");
+        showToast(demo.simpChinese() ? "輸出簡體中文" : "輸出繁體中文");
         render();
       });
 
@@ -1351,6 +1433,7 @@
         modState.held = 0;
         modState.latched = 0;
         buildKeyboard(btn.dataset.layout);
+        persistIfRuntimeChanged();
       });
 
       // 實體鍵盤
@@ -1409,7 +1492,7 @@
         ) {
           if (currentCfg.enable_caps_lock) {
             // 桌面 IME: 當 enable_caps_lock 開啟時, Shift 只做提示, 不切換
-            showToast(demo.langMode() === "chi" ? "CapsLock 鎖定中文模式" : "CapsLock 鎖定英數模式");
+            showToast(demo.langMode() === "chi" ? "大寫鎖定於中文模式" : "大寫鎖定於英數模式");
           } else {
             demo.toggleLangMode();
             showToast(demo.langMode() === "chi" ? "中文模式" : "英數模式");
@@ -1418,7 +1501,7 @@
         }
       });
 
-      buildKeyboard("win");
+      buildKeyboard(layout);
       render();
     </script>
   </body>

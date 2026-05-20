@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use chewing::editor::BasicEditor;
 use chewing_engine_kit::keysim::qwerty;
-use chewing_engine_kit::{EngineConfig, EnginePaths, build_editor};
+use chewing_engine_kit::{EmbeddedDicts, EngineConfig, EnginePaths, build_editor, build_editor_embedded};
 use tempfile::TempDir;
 
 fn fixtures_dir() -> PathBuf {
@@ -75,4 +75,63 @@ fn partial_syllable_match_forces_fuzzy() {
         editor.editor_options().conversion_engine,
         ConversionEngineKind::FuzzyChewingEngine
     ));
+}
+
+#[test]
+fn partial_syllable_match_with_no_search_dirs_uses_minidat() {
+    // 模擬 web sandbox: search_dirs 空,libchewing 會 fallback 到內建 mini.dat
+    // (Trie 格式,支援 FuzzyPartialPrefix). 確認此情境下單按聲母 + Down 能進入
+    // 候選字選擇模式而不是 spin_bell.
+    use chewing::input::{KeyboardEvent, keycode, keysym};
+    let mut cfg = EngineConfig::default();
+    cfg.partial_syllable_match = true;
+    let tmp = TempDir::new().unwrap();
+    let user_dict = tmp.path().join("user.dat");
+    let paths = EnginePaths {
+        search_dirs: &[],
+        user_dict: Some(user_dict.as_path()),
+        enabled_dicts: EnginePaths::DEFAULT_DICTS,
+    };
+    let mut editor = build_editor(&cfg, &paths);
+
+    // 'h' = ㄘ 聲母
+    for evt in qwerty(b"h") {
+        editor.process_keyevent(evt);
+    }
+    // 此時 syllable buffer 持有 ㄘ;Down 應 flush partial syllable 並開選字窗.
+    let down = KeyboardEvent::builder()
+        .code(keycode::KEY_DOWN)
+        .ksym(keysym::SYM_DOWN)
+        .build();
+    editor.process_keyevent(down);
+
+    let cands = editor.paginated_candidates().unwrap_or_default();
+    assert!(
+        !cands.is_empty(),
+        "partial-prefix lookup on built-in mini.dat 應該回傳至少一個 ㄘ 開頭的候選字"
+    );
+}
+
+#[test]
+fn embedded_dicts_resolve_multisyllable_phrase() {
+    // The web demo embeds real `.dat` images instead of reading from disk
+    // (no filesystem in wasm). Drive the embedded path with the fixture dicts
+    // and confirm a two-syllable phrase (測試) converts as one unit — the same
+    // mechanism that lets 台灣 be selected as a phrase rather than 台/灣 alone.
+    const WORD: &[u8] = include_bytes!("../fixtures/word.dat");
+    const TSI: &[u8] = include_bytes!("../fixtures/tsi.dat");
+
+    let mut editor = build_editor_embedded(
+        &EngineConfig::default(),
+        &EmbeddedDicts {
+            system_dicts: &[WORD, TSI],
+            symbols: None,
+        },
+    );
+
+    // ㄘㄜˋㄕˋ → the phrase 測試 from the embedded tsi.dat.
+    for evt in qwerty(b"hk4g4") {
+        editor.process_keyevent(evt);
+    }
+    assert_eq!("測試", editor.display());
 }

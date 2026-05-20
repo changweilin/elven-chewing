@@ -50,7 +50,11 @@
       "Bash(netstat -ano)",
       "Bash(tasklist /FI \"PID eq 34312\")",
       "PowerShell(Get-NetTCPConnection *)",
-      "Bash(taskkill //F //IM node.exe)"
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(cat package.json)",
+      "Bash(cat vite.config.*)",
+      "Bash(cat .gitignore)",
+      "Bash(git *)"
     ]
   }
 }

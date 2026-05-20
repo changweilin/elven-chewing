@@ -19,9 +19,12 @@
 use std::path::Path;
 
 use chewing::conversion::{ChewingEngine, FuzzyChewingEngine, SimpleEngine};
-use chewing::dictionary::LookupStrategy;
+use chewing::dictionary::{Dictionary, Layered, LookupStrategy, Trie};
 use chewing::editor::zhuyin_layout::{KeyboardLayoutCompat, SyllableEditor};
-use chewing::editor::{ConversionEngineKind, Editor, UserPhraseAddDirection};
+use chewing::editor::{
+    AbbrevTable, ConversionEngineKind, Editor, LaxUserFreqEstimate, SymbolSelector,
+    UserPhraseAddDirection,
+};
 
 pub mod keysim;
 
@@ -111,8 +114,69 @@ pub fn build_editor(config: &EngineConfig, paths: &EnginePaths<'_>) -> Editor {
         .user_dict
         .map(|p| p.to_string_lossy().into_owned());
 
-    let mut editor = Editor::chewing(search_path, user_dict, paths.enabled_dicts);
+    let editor = Editor::chewing(search_path, user_dict, paths.enabled_dicts);
+    configure_editor(editor, config)
+}
 
+/// Dictionary payloads already resident in memory, for targets without a
+/// filesystem — notably `wasm32-unknown-unknown` in the web demo. Each slice is
+/// a libchewing `.dat` Trie image, i.e. the raw bytes of `word.dat` / `tsi.dat`.
+#[derive(Debug, Clone, Copy)]
+pub struct EmbeddedDicts<'a> {
+    /// System dictionaries in load order; typically `[word.dat, tsi.dat]` to
+    /// match the desktop `EnginePaths::DEFAULT_DICTS` ordering.
+    pub system_dicts: &'a [&'a [u8]],
+    /// Optional symbol-selector table (`symbols.dat`) backing the `` ` `` menu.
+    /// `None` yields an empty table, matching the desktop fallback when no
+    /// `symbols.dat` is found.
+    pub symbols: Option<&'a [u8]>,
+}
+
+/// Construct an `Editor` from `config` plus dictionaries already in memory,
+/// bypassing the filesystem paths `Editor::chewing` requires.
+///
+/// The web demo `include_bytes!`s the real `word.dat` / `tsi.dat` and calls
+/// this so the browser sandbox shares desktop's full vocabulary — including
+/// multi-syllable phrase selection (e.g. 台灣 as one phrase) — instead of
+/// falling back to libchewing's tiny built-in `mini.dat`, which only knows a
+/// handful of single characters.
+///
+/// # Panics
+/// Panics if an embedded `.dat` image fails to parse. These are compiled-in
+/// assets, so a malformed image is a build mistake, not a runtime condition.
+pub fn build_editor_embedded(config: &EngineConfig, dicts: &EmbeddedDicts<'_>) -> Editor {
+    let system: Vec<Box<dyn Dictionary>> = dicts
+        .system_dicts
+        .iter()
+        .map(|bytes| {
+            let trie = Trie::new(*bytes)
+                .expect("embedded system dictionary should be a valid libchewing .dat image");
+            Box::new(trie) as Box<dyn Dictionary>
+        })
+        .collect();
+    let layered = Layered::new(system);
+    let estimate = LaxUserFreqEstimate::max_from(layered.user_dict());
+    let symbols = match dicts.symbols {
+        Some(bytes) => {
+            SymbolSelector::new(bytes).expect("embedded symbols.dat should be a valid table")
+        }
+        None => SymbolSelector::new(b"".as_slice()).expect("empty symbol table is always valid"),
+    };
+    let editor = Editor::new(
+        Box::new(ChewingEngine::new()),
+        layered,
+        estimate,
+        AbbrevTable::new(),
+        symbols,
+    );
+    configure_editor(editor, config)
+}
+
+/// Apply every `EngineConfig`-driven knob to a freshly built `editor`,
+/// regardless of how its dictionaries were sourced. This is the shared tail of
+/// [`build_editor`] and [`build_editor_embedded`], mirroring the option block in
+/// `tip/src/text_service/chewing.rs::build_editor_from_cfg`.
+fn configure_editor(mut editor: Editor, config: &EngineConfig) -> Editor {
     let (conv_kind, lookup) = match config.conv_engine {
         0 => (ConversionEngineKind::SimpleEngine, LookupStrategy::Standard),
         2 => (

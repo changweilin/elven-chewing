@@ -3,12 +3,15 @@
 //! Exposes the minimum surface JS needs to drive the engine: feed key bytes,
 //! read back the preedit, walk candidate windows, and reconfigure the engine
 //! through a [`DemoConfig`] that mirrors the user-visible fields of the
-//! desktop IME's `ChewingTsfConfig`. Dictionary data ships as the built-in
-//! `mini.dat` libchewing falls back to when no filesystem dicts are visible
-//! — there is no filesystem in `wasm32-unknown-unknown`.
+//! desktop IME's `ChewingTsfConfig`. There is no filesystem in
+//! `wasm32-unknown-unknown`, so the real `word.dat` / `tsi.dat` / `symbols.dat`
+//! are `include_bytes!`d into the bundle (staged by `build.rs`) and fed to the
+//! engine via [`chewing_engine_kit::build_editor_embedded`]. That gives the
+//! sandbox desktop-equivalent vocabulary — including multi-syllable phrase
+//! selection — instead of libchewing's tiny built-in `mini.dat` fallback.
 //!
 //! `DemoConfig` is a superset of [`chewing_engine_kit::EngineConfig`]: engine
-//! options are forwarded to libchewing through `build_editor`, while
+//! options are forwarded to libchewing through `build_editor_embedded`, while
 //! state-machine settings (language mode, caps lock behavior, sel keys, simp
 //! Chinese output, ...) are interpreted in this crate, the same way
 //! `tip::text_service::chewing` does on Windows.
@@ -18,10 +21,18 @@ use chewing::input::KeyboardEvent;
 use chewing::input::keycode::{self, Keycode};
 use chewing::input::keysym::{self, Keysym};
 use chewing_engine_kit::keysim::{Special, qwerty};
-use chewing_engine_kit::{EngineConfig, EnginePaths, build_editor};
+use chewing_engine_kit::{EmbeddedDicts, EngineConfig, build_editor_embedded};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use zhconv::{Variant, zhconv};
+
+/// Real libchewing dictionaries compiled into the wasm bundle. `build.rs`
+/// stages these from `build/installer/Dictionary/` into `OUT_DIR`; embedding
+/// them is what gives the browser the same vocabulary and phrase selection as
+/// the desktop IME (there is no filesystem to load `.dat` files from).
+const WORD_DAT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/word.dat"));
+const TSI_DAT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/tsi.dat"));
+const SYMBOLS_DAT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/symbols.dat"));
 
 #[wasm_bindgen(start)]
 pub fn _start() {
@@ -449,12 +460,19 @@ impl ChewingDemo {
 
     /// Candidate window contents for the current page, or empty if the
     /// engine is not in a candidate-selection state.
+    ///
+    /// `paginated_candidates()` can hand back more entries than the configured
+    /// page size, so cap it at `cand_per_page` — mirroring the desktop TSF path
+    /// (`text_service::chewing::update_candidates`, which does `items.truncate`)
+    /// and keeping the list aligned with the `cand_per_page`-length sel keys.
     #[wasm_bindgen(js_name = candidates)]
     pub fn candidates(&self) -> Vec<JsValue> {
+        let n = self.cfg.cand_per_page as usize;
         self.editor
             .paginated_candidates()
             .unwrap_or_default()
             .into_iter()
+            .take(n)
             .map(|c| JsValue::from(self.maybe_simp(c)))
             .collect()
     }
@@ -522,12 +540,14 @@ fn byte_to_event(byte: u8) -> KeyboardEvent {
 }
 
 fn fresh_editor(cfg: &EngineConfig) -> Editor {
-    let paths = EnginePaths {
-        search_dirs: &[],
-        user_dict: None,
-        enabled_dicts: EnginePaths::DEFAULT_DICTS,
-    };
-    build_editor(cfg, &paths)
+    build_editor_embedded(
+        cfg,
+        &EmbeddedDicts {
+            // word.dat then tsi.dat, matching EnginePaths::DEFAULT_DICTS order.
+            system_dicts: &[WORD_DAT, TSI_DAT],
+            symbols: Some(SYMBOLS_DAT),
+        },
+    )
 }
 
 /// Translate a string name from the JS side into a `KeyboardEvent`. Handles

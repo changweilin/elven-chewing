@@ -12,6 +12,17 @@ cargo install wasm-pack
 npm install        # installs vite into node_modules/
 ```
 
+The bundle embeds the real libchewing dictionaries (`word.dat` / `tsi.dat` /
+`symbols.dat`), so they must be present before building the wasm:
+
+```sh
+cargo xtask download   # unpacks them into build/installer/Dictionary/
+```
+
+`build.rs` stages those into `OUT_DIR`; if they're missing the wasm build fails
+with a message pointing back here. Override the source dir with
+`CHEWING_DICT_DIR` if you stage them elsewhere.
+
 ## Local dev (Tailscale-accessible)
 
 ```sh
@@ -53,20 +64,22 @@ it survives subpath hosting.
 ## Scope
 
 This is engine-only. It exercises libchewing through the same
-`chewing_engine_kit::build_editor` adapter the headless `cargo test` job uses,
-so behaviour stays in sync. It does **not** simulate:
+`chewing_engine_kit` adapter the headless `cargo test` job uses, so behaviour
+stays in sync, and it embeds the real dictionaries so typing — including
+multi-syllable phrase selection (e.g. 台灣 as one phrase) — matches desktop.
+It does **not** simulate:
 
 - TSF event flow (focus, composition, display attributes).
-- Candidate-window rendering (the engine just exposes preedit/commit text).
 - Out-of-process IPC, AppContainer ACL, code signing.
 
 For full integration coverage, the `windows-integration` CI job runs on a
 self-hosted Windows runner — see `design/ci-self-hosted-runner.md`.
 
-## Replacing the bundled dictionary
+## Bundled dictionary
 
-The browser has no filesystem, so libchewing falls back to its built-in
-`mini.dat` (a few-entry stub). To exercise real vocabulary, embed a real
-`tsi.dat` / `word.dat` via `include_bytes!` and construct the editor with
-`chewing::dictionary::Trie::new(&bytes[..])` instead of going through
-`build_editor` — see `chewing::editor::Editor::new` for the manual path.
+The browser has no filesystem, so the real `word.dat` / `tsi.dat` /
+`symbols.dat` are compiled into the wasm: `build.rs` stages them from
+`build/installer/Dictionary/` into `OUT_DIR`, `src/lib.rs` `include_bytes!`s
+them, and `chewing_engine_kit::build_editor_embedded` builds the editor from
+those in-memory Tries. This adds ~4.8 MB to the bundle. To slim it down, point
+`CHEWING_DICT_DIR` at a trimmed `.dat` set built with `chewing-cli`.
