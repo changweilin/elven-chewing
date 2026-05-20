@@ -113,6 +113,47 @@ fn partial_syllable_match_with_no_search_dirs_uses_minidat() {
 }
 
 #[test]
+fn keypad_commits_literal_digit() {
+    use chewing_engine_kit::keysim::keypad;
+    let tmp = TempDir::new().unwrap();
+    let mut editor = make_editor_with(&EngineConfig::default(), &tmp.path().join("user.dat"));
+
+    // Numpad '7' on an empty buffer commits the literal digit, NOT the注音 the
+    // QWERTY '7' would yield (the ˙ light-tone mark). This is what makes the
+    // web demo's on-screen numpad behave like a physical one.
+    let evt = keypad(b'7').expect("'7' is a keypad key");
+    editor.process_keyevent(evt);
+    assert_eq!("7", editor.display_commit());
+    assert_eq!("", editor.display());
+}
+
+#[test]
+fn keypad_digit_selects_candidate_during_selection() {
+    use chewing::input::{KeyboardEvent, keycode, keysym};
+    use chewing_engine_kit::keysim::keypad;
+    let tmp = TempDir::new().unwrap();
+    let mut editor = make_editor_with(&EngineConfig::default(), &tmp.path().join("user.dat"));
+
+    // ㄘㄜˋ → candidate window {測, 策}; open it with Down.
+    for evt in qwerty(b"hk4") {
+        editor.process_keyevent(evt);
+    }
+    let down = KeyboardEvent::builder()
+        .code(keycode::KEY_DOWN)
+        .ksym(keysym::SYM_DOWN)
+        .build();
+    editor.process_keyevent(down);
+
+    let cands = editor.paginated_candidates().unwrap_or_default();
+    assert!(cands.len() >= 2, "ㄘㄜˋ should offer at least two candidates");
+    let first = cands[0].clone();
+
+    // Keypad '1' selects candidate #1, exactly like the main-row digit would.
+    editor.process_keyevent(keypad(b'1').expect("'1' is a keypad key"));
+    assert_eq!(first, editor.display());
+}
+
+#[test]
 fn embedded_dicts_resolve_multisyllable_phrase() {
     // The web demo embeds real `.dat` images instead of reading from disk
     // (no filesystem in wasm). Drive the embedded path with the fixture dicts

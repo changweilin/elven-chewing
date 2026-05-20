@@ -4,31 +4,98 @@
     <meta charset="utf-8" />
     <title>精靈語輸入法 Web Sandbox</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#16382c" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#1f4d3f" media="(prefers-color-scheme: light)" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <style>
+      /* === Elven Fluent palette ===
+         A forest-green + mithril-silver + gold theme styled after the brand
+         logo, with Win11 Fluent surfaces (rounded, translucent, soft-shadowed).
+         Light is the default; dark follows the OS via prefers-color-scheme. */
       :root {
-        --fg: #1f2937;
-        --muted: #6b7280;
-        --bg: #f9fafb;
-        --border: #d1d5db;
-        --accent: #2563eb;
-        --key-bg: #ffffff;
-        --key-border: #9ca3af;
-        --special-bg: #e5e7eb;
-        --pressed-bg: #c7d2fe;
-        --latched-bg: #fde68a;
-        --latched-border: #d97706;
+        --fg: #1b2a24;
+        --muted: #5c6b63;
+        --bg-page: #e9efe9;
+        --surface: rgba(255, 255, 255, 0.72);
+        --surface-solid: #ffffff;
+        --bg: var(--surface);
+        --border: rgba(31, 77, 63, 0.14);
+        --hairline: rgba(31, 77, 63, 0.12);
+        --accent: #1f6b4f;
+        --accent-strong: #16553e;
+        --accent-soft: rgba(31, 107, 79, 0.12);
+        --on-accent: #ffffff;
+        --gold: #b07d2e;
+        --key-bg: rgba(255, 255, 255, 0.9);
+        --key-border: rgba(31, 77, 63, 0.28);
+        --special-bg: rgba(31, 77, 63, 0.08);
+        --pressed-bg: rgba(31, 107, 79, 0.22);
+        --latched-bg: rgba(200, 162, 74, 0.3);
+        --latched-border: #c8a24a;
+        --shadow: 0 6px 20px rgba(16, 40, 32, 0.1);
         --u: 40px;   /* base key unit (一個 1u 鍵的邊長) */
         --kgap: 4px; /* 鍵與鍵之間的間隙 */
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #e6ede9;
+          --muted: #9bada4;
+          --bg-page: #0e1a15;
+          --surface: rgba(28, 42, 36, 0.66);
+          --surface-solid: #17251e;
+          --border: rgba(223, 231, 226, 0.12);
+          --hairline: rgba(223, 231, 226, 0.1);
+          --accent: #58c79a;
+          --accent-strong: #6fd3aa;
+          --accent-soft: rgba(88, 199, 154, 0.16);
+          --on-accent: #0e1a15;
+          --gold: #d8b760;
+          --key-bg: rgba(40, 54, 47, 0.85);
+          --key-border: rgba(223, 231, 226, 0.22);
+          --special-bg: rgba(223, 231, 226, 0.07);
+          --pressed-bg: rgba(88, 199, 154, 0.28);
+          --latched-bg: rgba(216, 183, 96, 0.26);
+          --latched-border: #d8b760;
+          --shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+        }
       }
       body {
         font-family: "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
         max-width: 1180px;
-        margin: 1.5rem auto;
-        padding: 0 1rem;
+        margin: 0 auto;
+        padding: 1.5rem 1rem 3rem;
         color: var(--fg);
+        background:
+          radial-gradient(1100px 520px at 12% -8%, rgba(31, 107, 79, 0.16), transparent 60%),
+          radial-gradient(900px 480px at 108% 4%, rgba(200, 162, 74, 0.12), transparent 55%),
+          var(--bg-page);
+        background-attachment: fixed;
+        min-height: 100vh;
       }
-      header { margin-bottom: 1.25rem; }
-      h1 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+      /* shared elven glyph styling — symbols inherit colour via currentColor */
+      .glyph { width: 1.1em; height: 1.1em; display: inline-block; vertical-align: -0.18em; }
+      header {
+        margin-bottom: 1.4rem;
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+      }
+      .brand-mark {
+        width: 44px; height: 44px; flex: 0 0 auto;
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+      }
+      h1 {
+        margin: 0 0 0.15rem;
+        font-size: 1.4rem;
+        letter-spacing: 0.01em;
+        background: linear-gradient(95deg, var(--accent-strong), var(--gold));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
       .subtitle { color: var(--muted); font-size: 0.9rem; margin: 0; }
 
       .layout {
@@ -61,16 +128,24 @@
       }
       .panel {
         border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 0.9rem 1rem;
-        background: var(--bg);
+        border-radius: 14px;
+        padding: 0.95rem 1.1rem;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(22px) saturate(1.35);
+        -webkit-backdrop-filter: blur(22px) saturate(1.35);
       }
       .panel h2 {
-        margin: 0 0 0.6rem;
-        font-size: 0.85rem;
-        letter-spacing: 0.05em;
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin: 0 0 0.7rem;
+        font-size: 0.8rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
         color: var(--muted);
       }
+      .panel h2 .glyph { color: var(--gold); width: 1em; height: 1em; }
       .preedit {
         font-size: 1.6rem;
         min-height: 2.2rem;
@@ -81,7 +156,7 @@
         font-family: ui-monospace, monospace;
         white-space: pre-wrap;
         font-size: 0.85rem;
-        color: #374151;
+        color: var(--fg);
         max-height: 8rem;
         overflow: auto;
       }
@@ -107,45 +182,72 @@
         font-family: ui-monospace, monospace;
       }
 
-      /* Status / lang bar */
-      .lang-bar {
-        display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
-        font-size: 0.85rem;
-        margin-bottom: 0.5rem;
+      /* === Language bar — styled as the Windows 11 taskbar input flyout ===
+         Mirrors the small acrylic flyout the system tray IME indicator opens,
+         so the sandbox previews how the language bar docks into Win10/11. */
+      .tray-flyout {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(22px) saturate(1.4);
+        -webkit-backdrop-filter: blur(22px) saturate(1.4);
+        padding: 0.5rem 0.6rem;
+        margin-bottom: 0.75rem;
       }
-      .lang-bar .pill {
-        padding: 2px 8px; border-radius: 999px;
-        background: #e0e7ff; color: #1e3a8a;
+      .tray-caption {
+        display: flex; align-items: center; gap: 0.4rem;
+        font-size: 0.7rem; letter-spacing: 0.04em;
+        color: var(--muted); margin: 0 0.15rem 0.45rem;
+      }
+      .tray-caption .glyph { width: 0.95em; height: 0.95em; color: var(--accent); }
+      .tray-pills { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
+      .tray-pill {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        padding: 0.34rem 0.72rem;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+        font: inherit; font-size: 0.86rem;
         cursor: pointer; user-select: none;
+        transition: background 0.15s, transform 0.05s, border-color 0.15s;
       }
-      .lang-bar .pill[data-on="0"] { background: #f3f4f6; color: var(--muted); }
-      .lang-bar .pill:hover { filter: brightness(0.97); }
-      .lang-bar .toast {
+      .tray-pill .glyph { width: 1.2em; height: 1.2em; }
+      .tray-pill:hover { border-color: var(--accent); }
+      .tray-pill:active { transform: translateY(1px); }
+      .tray-pill[data-on="0"] { background: var(--special-bg); color: var(--muted); }
+      .toast {
         margin-left: auto;
-        padding: 2px 8px;
-        font-size: 0.78rem;
-        border-radius: 4px;
+        padding: 0.3rem 0.65rem;
+        font-size: 0.76rem;
+        border-radius: 8px;
         opacity: 0;
         transition: opacity 0.25s;
+        box-shadow: var(--shadow);
       }
-      .lang-bar .toast.show { opacity: 1; }
+      .toast.show { opacity: 1; }
 
-      /* Settings: tabs */
+      /* Settings: tabs — Win11 segmented pills with elven glyph icons */
       .settings-tabs {
         display: flex; flex-wrap: wrap;
-        gap: 2px; margin-bottom: 0.5rem;
-        border-bottom: 1px solid var(--border);
+        gap: 4px; margin-bottom: 0.75rem;
       }
       .settings-tabs button {
+        display: inline-flex; align-items: center; gap: 0.35rem;
         background: transparent;
-        border: 0; padding: 5px 9px;
-        font-size: 0.82rem; cursor: pointer;
+        border: 1px solid transparent; border-radius: 8px;
+        padding: 0.34rem 0.62rem;
+        font: inherit; font-size: 0.82rem; cursor: pointer;
         color: var(--muted);
-        border-bottom: 2px solid transparent;
+        transition: background 0.15s, color 0.15s, border-color 0.15s;
       }
+      .settings-tabs button .glyph { width: 1.05em; height: 1.05em; }
+      .settings-tabs button:hover { background: var(--accent-soft); color: var(--fg); }
       .settings-tabs button.active {
-        color: var(--accent);
-        border-bottom-color: var(--accent);
+        color: var(--accent-strong);
+        background: var(--accent-soft);
+        border-color: var(--accent);
         font-weight: 600;
       }
       .settings .tab-page { display: none; }
@@ -159,6 +261,55 @@
       .settings .row .hint {
         font-size: 0.72rem;
         color: var(--muted);
+      }
+      .settings .about-me {
+        display: grid;
+        gap: 0.7rem;
+        font-size: 0.88rem;
+      }
+      .settings .about-name {
+        font-size: 1.05rem;
+        font-weight: 700;
+      }
+      .settings .about-quote {
+        margin: 0;
+        padding-left: 0.85rem;
+        border-left: 2px solid var(--accent);
+        color: var(--fg);
+      }
+      .settings .about-quote p { margin: 0.18rem 0; }
+      .settings .about-quote cite {
+        display: block;
+        margin-top: 0.3rem;
+        color: var(--muted);
+        font-style: normal;
+      }
+      .settings .about-links {
+        display: grid;
+        gap: 0.45rem;
+      }
+      .settings .about-link {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-height: 2rem;
+        padding: 0.36rem 0.45rem;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: var(--surface-solid);
+        color: var(--fg);
+        text-decoration: none;
+        overflow-wrap: anywhere;
+      }
+      .settings .about-link:hover {
+        border-color: var(--accent);
+        color: var(--accent-strong);
+      }
+      .settings .about-link .favicon {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 16px;
+        border-radius: 3px;
       }
       .settings input[type="color"] {
         padding: 0; width: 2.6rem; height: 1.4rem;
@@ -181,16 +332,35 @@
         font-size: 0.9rem;
       }
       .settings label { color: var(--fg); }
-      .settings input, .settings select { width: 100%; padding: 3px 6px; }
+      .settings input, .settings select {
+        width: 100%; padding: 0.32rem 0.5rem;
+        border: 1px solid var(--border); border-radius: 7px;
+        background: var(--surface-solid); color: var(--fg);
+        font: inherit; font-size: 0.86rem;
+      }
+      .settings input[type="checkbox"] {
+        width: auto; accent-color: var(--accent); transform: scale(1.15);
+      }
+      .settings input:focus, .settings select:focus {
+        outline: none; border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
       .settings .actions {
-        display: flex; gap: 0.5rem; margin-top: 0.6rem;
+        display: flex; gap: 0.5rem; margin-top: 0.8rem; flex-wrap: wrap;
       }
       .btn {
-        padding: 6px 12px; border: 1px solid var(--border);
-        border-radius: 4px; background: #fff; cursor: pointer; font-size: 0.9rem;
+        padding: 0.46rem 0.95rem; border: 1px solid var(--border);
+        border-radius: 8px; background: var(--surface-solid); color: var(--fg);
+        cursor: pointer; font: inherit; font-size: 0.9rem;
+        box-shadow: var(--shadow);
+        transition: background 0.15s, border-color 0.15s, transform 0.05s;
       }
-      .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-      .btn:hover { filter: brightness(0.97); }
+      .btn:hover { border-color: var(--accent); }
+      .btn:active { transform: translateY(1px); }
+      .btn.primary {
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+        color: var(--on-accent); border-color: var(--accent-strong);
+      }
 
       /* === Virtual keyboard === */
       .kb-toolbar {
@@ -202,6 +372,8 @@
         font-size: 0.85rem;
         color: var(--muted);
       }
+      .kb-title { display: inline-flex; align-items: center; gap: 0.4rem; }
+      .kb-title .glyph { color: var(--gold); width: 1em; height: 1em; }
       .kb-hint {
         margin-left: auto;
         font-size: 0.78rem;
@@ -209,20 +381,21 @@
       .kb-toolbar .seg {
         display: inline-flex;
         border: 1px solid var(--border);
-        border-radius: 6px;
+        border-radius: 8px;
         overflow: hidden;
       }
       .kb-toolbar .seg button {
         border: 0;
-        background: #fff;
+        background: var(--surface-solid);
         padding: 4px 12px;
         cursor: pointer;
+        font: inherit;
         font-size: 0.85rem;
         color: var(--fg);
       }
       .kb-toolbar .seg button.active {
         background: var(--accent);
-        color: #fff;
+        color: var(--on-accent);
       }
 
       .kb-wrap {
@@ -236,6 +409,22 @@
         flex-direction: column;
         gap: var(--kgap);
       }
+      /* nav 叢集 + 數字鍵盤 並排成「側欄」。桌面接在主鍵區右側 (順序同實體
+         鍵盤);手機整組落到主鍵區下方,數字鍵盤緊貼方向鍵/PgUp/PgDn 右邊。 */
+      .kb-side {
+        display: flex;
+        align-items: flex-start;
+        gap: calc(var(--kgap) * 3);
+      }
+      /* 數字鍵盤 4 欄 × 5 列;+ 與 Enter 跨兩列、0 跨兩欄,排版同實體 numpad。 */
+      .kb-numpad {
+        display: grid;
+        grid-template-columns: repeat(4, var(--u));
+        grid-template-rows: repeat(5, var(--u));
+        gap: var(--kgap);
+        align-content: start;
+      }
+      .kb-numpad .key { width: auto; height: auto; }
       .kb-row { display: flex; gap: var(--kgap); }
       .key {
         width: var(--u);
@@ -264,7 +453,7 @@
       .key.label-xs { font-size: 0.66rem; }
       .key.spacer { visibility: hidden; }
       .key.special { background: var(--special-bg); }
-      .key:hover { background: #eef2ff; }
+      .key:hover { background: var(--accent-soft); }
       .key.pressed { background: var(--pressed-bg); transform: translateY(1px); border-bottom-width: 1px; }
       .key.latched {
         background: var(--latched-bg);
@@ -276,7 +465,7 @@
         margin-top: 2px;
         font-family: "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
       }
-      .key.special .zh { color: #6b7280; }
+      .key.special .zh { color: var(--muted); }
       .key .shifted {
         font-size: 0.6rem;
         color: var(--muted);
@@ -362,54 +551,152 @@
           -webkit-overflow-scrolling: touch;
           padding-bottom: 6px;
         }
-        .kb-main, .kb-nav { flex: 0 0 auto; }
+        .kb-main, .kb-side { flex: 0 0 auto; }
         /* hint 在窄螢幕容易佔掉一整行；隱藏避免把鍵盤推下去。 */
         .kb-hint { display: none; }
       }
     </style>
   </head>
   <body>
+    <!-- === Elven glyph sprite ===
+         Hand-drawn "精靈語" symbols. chi/eng/simp/full/half/config are the same
+         shapes baked into the Windows tray .ico files (design/elven-glyphs/gen.py);
+         the rest are web-only tab marks in the same calligraphic style.
+         All inherit colour via currentColor. -->
+    <svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+      <symbol id="g-chi" viewBox="0 0 100 100">
+        <g fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M42 16C42 40 42 62 42 84"/>
+          <path d="M42 50C80 48 82 90 42 86"/>
+          <path d="M42 20C28 10 20 22 34 30"/>
+        </g>
+      </symbol>
+      <symbol id="g-eng" viewBox="0 0 100 100">
+        <g fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M50 16C50 40 50 62 50 84"/>
+          <path d="M50 30C78 28 78 54 50 50"/>
+          <path d="M50 56C22 54 22 82 50 80"/>
+        </g>
+      </symbol>
+      <symbol id="g-simp" viewBox="0 0 100 100">
+        <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path stroke-width="13" d="M42 16C42 40 42 62 42 84"/>
+          <path stroke-width="13" d="M42 50C80 48 82 90 42 86"/>
+          <path stroke-width="13" d="M42 20C28 10 20 22 34 30"/>
+          <path stroke-width="9" d="M40 10C50 1 62 4 58 14"/>
+        </g>
+      </symbol>
+      <symbol id="g-full" viewBox="0 0 100 100">
+        <g fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M50 18C68 18 82 32 82 50C82 68 68 82 50 82C32 82 18 68 18 50C18 32 32 18 50 18Z"/>
+        </g>
+        <circle cx="50" cy="50" r="8" fill="currentColor"/>
+      </symbol>
+      <symbol id="g-half" viewBox="0 0 100 100">
+        <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path stroke-width="11" d="M50 18C32 18 18 32 18 50C18 68 32 82 50 82"/>
+          <path stroke-width="9" d="M50 18L50 82"/>
+        </g>
+      </symbol>
+      <symbol id="g-config" viewBox="0 0 100 100">
+        <path fill="currentColor" d="M50 10L44.64 37.07L21.72 21.72L37.07 44.64L10 50L37.07 55.36L21.72 78.28L44.64 62.93L50 90L55.36 62.93L78.28 78.28L62.93 55.36L90 50L62.93 44.64L78.28 21.72L55.36 37.07Z"/>
+      </symbol>
+      <symbol id="g-quill" viewBox="0 0 100 100">
+        <g fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M30 74L66 32"/>
+          <path d="M66 32C80 34 78 52 60 56"/>
+          <path d="M30 74L22 82"/>
+        </g>
+      </symbol>
+      <symbol id="g-runes" viewBox="0 0 100 100">
+        <g fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 80L74 80"/>
+          <path d="M30 70L30 58"/>
+          <path d="M48 70L48 46"/>
+          <path d="M66 70L66 34"/>
+        </g>
+      </symbol>
+      <symbol id="g-leaf" viewBox="0 0 100 100">
+        <g fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M50 16C30 30 26 64 50 84C74 64 70 30 50 16Z"/>
+          <path d="M50 24L50 78"/>
+        </g>
+      </symbol>
+      <symbol id="g-key" viewBox="0 0 100 100">
+        <g fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M32 34H68Q76 34 76 42V62Q76 70 68 70H32Q24 70 24 62V42Q24 34 32 34Z"/>
+          <path d="M40 56L50 46L60 56"/>
+        </g>
+      </symbol>
+      <symbol id="g-ink" viewBox="0 0 100 100">
+        <g fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M50 18C66 42 72 56 64 70C58 80 42 80 36 70C28 56 34 42 50 18Z"/>
+        </g>
+      </symbol>
+      <symbol id="g-spark" viewBox="0 0 100 100">
+        <path fill="currentColor" d="M50 18L57 43L82 50L57 57L50 82L43 57L18 50L43 43Z"/>
+      </symbol>
+    </svg>
+
     <header>
+      <img class="brand-mark" src="favicon.svg" alt="精靈語輸入法 標誌" />
+      <div>
       <h1>精靈語輸入法 — 網頁沙盒</h1>
       <p class="subtitle">
         純引擎預覽，跑在 WebAssembly 上；可用實體鍵盤直接輸入，下方虛擬鍵盤主要供觸控、展示與非打字者使用。
         文字服務 (TSF)、候選字視窗、跨程序 IPC 不在此沙盒範圍，詳見
         <code>design/ci-self-hosted-runner.md</code> 中的 Windows 整合說明。
       </p>
+      </div>
     </header>
 
     <div class="layout">
       <section class="panel area-preedit">
-        <h2>輸入預覽</h2>
-        <div class="lang-bar" id="lang-bar">
-          <span>輸入法狀態</span>
-          <span class="pill" id="pill-lang" title="點按切換 中文 / 英數">中</span>
-          <span class="pill" id="pill-shape" title="點按切換 全形 / 半形">半</span>
-          <span class="pill" id="pill-simp" data-on="0" title="點按或 Ctrl+F12 切換 繁體 / 簡體 輸出">簡</span>
-          <span class="toast" id="toast"></span>
+        <h2><svg class="glyph"><use href="#g-quill"></use></svg>輸入預覽</h2>
+        <div class="tray-flyout" id="lang-bar">
+          <div class="tray-caption">
+            <svg class="glyph"><use href="#g-spark"></use></svg>
+            Windows 11 工作列輸入指示器
+          </div>
+          <div class="tray-pills">
+            <button type="button" class="tray-pill" id="pill-lang" title="點按切換 中文 / 英數">
+              <svg class="glyph"><use id="use-lang" href="#g-chi"></use></svg>
+              <span class="tray-pill-label" id="lbl-lang">中文</span>
+            </button>
+            <button type="button" class="tray-pill" id="pill-shape" title="點按切換 全形 / 半形">
+              <svg class="glyph"><use id="use-shape" href="#g-half"></use></svg>
+              <span class="tray-pill-label" id="lbl-shape">半形</span>
+            </button>
+            <button type="button" class="tray-pill" id="pill-simp" data-on="0" title="點按或 Ctrl+F12 切換 繁體 / 簡體 輸出">
+              <svg class="glyph"><use id="use-simp" href="#g-chi"></use></svg>
+              <span class="tray-pill-label" id="lbl-simp">繁體</span>
+            </button>
+            <span class="toast" id="toast"></span>
+          </div>
         </div>
         <div id="preedit" class="preedit"></div>
       </section>
 
       <section class="panel area-candidates">
-        <h2>候選字</h2>
+        <h2><svg class="glyph"><use href="#g-runes"></use></svg>候選字</h2>
         <div id="candidates" class="candidates"></div>
       </section>
 
       <section class="panel area-commit">
-        <h2>已提交文字</h2>
+        <h2><svg class="glyph"><use href="#g-leaf"></use></svg>已提交文字</h2>
         <div id="commit-log" class="commit-log"></div>
       </section>
 
       <section class="panel settings area-settings">
-        <h2>引擎設定</h2>
+        <h2><svg class="glyph"><use href="#g-config"></use></svg>引擎設定</h2>
         <div class="settings-tabs" id="settings-tabs">
-          <button type="button" data-tab="typing" class="active">輸入</button>
-          <button type="button" data-tab="cand">選字</button>
-          <button type="button" data-tab="lang">語言</button>
-          <button type="button" data-tab="kbd">鍵盤</button>
-          <button type="button" data-tab="ui">外觀</button>
-          <button type="button" data-tab="misc">其他</button>
+          <button type="button" data-tab="typing" class="active"><svg class="glyph"><use href="#g-quill"></use></svg>輸入</button>
+          <button type="button" data-tab="cand"><svg class="glyph"><use href="#g-runes"></use></svg>選字</button>
+          <button type="button" data-tab="lang"><svg class="glyph"><use href="#g-leaf"></use></svg>語言</button>
+          <button type="button" data-tab="kbd"><svg class="glyph"><use href="#g-key"></use></svg>鍵盤</button>
+          <button type="button" data-tab="ui"><svg class="glyph"><use href="#g-ink"></use></svg>外觀</button>
+          <button type="button" data-tab="misc"><svg class="glyph"><use href="#g-spark"></use></svg>其他</button>
+          <button type="button" data-tab="about"><svg class="glyph"><use href="#g-spark"></use></svg>About Me</button>
         </div>
         <form id="settings-form">
           <!-- ===== Tab: 輸入 ===== -->
@@ -678,6 +965,32 @@
             <div class="row note">桌面版會在切換 中文 / 英數 或 繁體 / 簡體 時顯示浮動氣球；網頁沙盒改用上方狀態列短暫提示。</div>
           </div>
 
+          <!-- ===== Tab: About Me ===== -->
+          <div class="tab-page" data-tab="about">
+            <div class="about-me">
+              <div class="about-name">Chang Wei Lin</div>
+              <blockquote class="about-quote">
+                <p>我愛星空至深，無懼黑夜。</p>
+                <p>We have loved the stars too fondly to fear the dark.</p>
+                <cite>— &lt;The Old Astronomer&gt; Sarah Williams</cite>
+              </blockquote>
+              <div class="about-links">
+                <a class="about-link" href="https://github.com/changweilin" target="_blank" rel="noopener noreferrer">
+                  <img class="favicon" src="https://www.google.com/s2/favicons?sz=32&amp;domain=github.com" alt="" />
+                  <span>github.com/changweilin</span>
+                </a>
+                <a class="about-link" href="https://www.linkedin.com/in/wei-lin-chang-ba38049a/" target="_blank" rel="noopener noreferrer">
+                  <img class="favicon" src="https://www.google.com/s2/favicons?sz=32&amp;domain=linkedin.com" alt="" />
+                  <span>linkedin.com/in/wei-lin-chang-ba38049a</span>
+                </a>
+                <a class="about-link" href="https://changweilin.github.io/demo_link/" target="_blank" rel="noopener noreferrer">
+                  <img class="favicon" src="https://www.google.com/s2/favicons?sz=32&amp;domain=changweilin.github.io" alt="" />
+                  <span>changweilin.github.io/demo_link</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
           <div class="actions">
             <button type="submit" class="btn primary">套用並重設</button>
             <button type="button" class="btn" id="clear-buffer">清空輸入緩衝</button>
@@ -688,7 +1001,7 @@
 
       <section class="panel area-keyboard">
         <div class="kb-toolbar">
-          <span>虛擬鍵盤</span>
+          <span class="kb-title"><svg class="glyph"><use href="#g-key"></use></svg>虛擬鍵盤</span>
           <div class="seg" id="layout-seg">
             <button type="button" data-layout="win" class="active">Windows 配置</button>
             <button type="button" data-layout="mac">Mac 配置</button>
@@ -942,6 +1255,31 @@
         ),
       ];
 
+      // 數字鍵盤 (numpad)。col/row 為 1-based grid 起點;rowSpan/colSpan 給
+      // + 與 Enter 的兩列高、0 的兩欄寬,排版與實體 numpad 相同。
+      //   kp: true → 走 keypad path,送出數字/運算子而非注音;
+      //   sp       → special 鍵 (Enter);
+      //   inert    → 純顯示 (NumLock,沙盒不切換)。
+      const NUMPAD = [
+        { label: "Num", sub: "Lock", inert: true, col: 1, row: 1, cls: "special label-xs" },
+        { a: "/", kp: true, col: 2, row: 1, cls: "special" },
+        { a: "*", kp: true, col: 3, row: 1, cls: "special" },
+        { a: "-", kp: true, col: 4, row: 1, cls: "special" },
+        { a: "7", kp: true, col: 1, row: 2 },
+        { a: "8", kp: true, col: 2, row: 2 },
+        { a: "9", kp: true, col: 3, row: 2 },
+        { a: "+", kp: true, col: 4, row: 2, rowSpan: 2, cls: "special" },
+        { a: "4", kp: true, col: 1, row: 3 },
+        { a: "5", kp: true, col: 2, row: 3 },
+        { a: "6", kp: true, col: 3, row: 3 },
+        { a: "1", kp: true, col: 1, row: 4 },
+        { a: "2", kp: true, col: 2, row: 4 },
+        { a: "3", kp: true, col: 3, row: 4 },
+        { sp: "Return", label: "Enter", col: 4, row: 4, rowSpan: 2, cls: "special label-sm" },
+        { a: "0", kp: true, col: 1, row: 5, colSpan: 2 },
+        { a: ".", kp: true, col: 3, row: 5 },
+      ];
+
       // --- 渲染 ---
       const preedit = document.getElementById("preedit");
       const commitLog = document.getElementById("commit-log");
@@ -1021,12 +1359,24 @@
         return `rgba(${parseInt(rgb.slice(0,2),16)},${parseInt(rgb.slice(2,4),16)},${parseInt(rgb.slice(4,6),16)},${alpha.toFixed(3)})`;
       }
 
+      // 把語言列的精靈字符與文字標籤對齊目前狀態。pill 的圖示用 <use href>
+      // 切換對應的精靈 glyph,文字標籤保留中文以便辨識 (符合「符號換精靈語、
+      // 字仍可讀」)。
+      function setGlyph(useId, sym) {
+        const u = document.getElementById(useId);
+        u.setAttribute("href", sym);
+        u.setAttribute("xlink:href", sym); // 舊瀏覽器相容
+      }
       function refreshLangBar() {
         const lang = demo.langMode();
         const shape = demo.shapeMode();
         const simp = demo.simpChinese();
-        document.getElementById("pill-lang").textContent = lang === "chi" ? "中" : "英";
-        document.getElementById("pill-shape").textContent = shape === "full" ? "全" : "半";
+        setGlyph("use-lang", lang === "chi" ? "#g-chi" : "#g-eng");
+        document.getElementById("lbl-lang").textContent = lang === "chi" ? "中文" : "英數";
+        setGlyph("use-shape", shape === "full" ? "#g-full" : "#g-half");
+        document.getElementById("lbl-shape").textContent = shape === "full" ? "全形" : "半形";
+        setGlyph("use-simp", simp ? "#g-simp" : "#g-chi");
+        document.getElementById("lbl-simp").textContent = simp ? "簡體" : "繁體";
         document.getElementById("pill-simp").dataset.on = simp ? "1" : "0";
       }
 
@@ -1097,8 +1447,16 @@
         nav.appendChild(navSpacer);
         for (const r of ARROW_BLOCK) appendRow(nav, r);
 
+        // nav 叢集與數字鍵盤並排成側欄。桌面時側欄接在主鍵區右側 (= 實體鍵盤
+        // 的 nav→numpad 順序);手機 (.kb-wrap 改直向) 時整個側欄落到主鍵區
+        // 下方,數字鍵盤自然落在方向鍵/PgUp/PgDn 區塊的右邊。
+        const side = document.createElement("div");
+        side.className = "kb-side";
+        side.appendChild(nav);
+        side.appendChild(buildNumpad());
+
         kbRoot.appendChild(main);
-        kbRoot.appendChild(nav);
+        kbRoot.appendChild(side);
 
         rebuildModButtons();
       }
@@ -1202,6 +1560,44 @@
         return b;
       }
 
+      function buildNumpad() {
+        const pad = document.createElement("div");
+        pad.className = "kb-numpad";
+        for (const cell of NUMPAD) pad.appendChild(makeNumpadKey(cell));
+        return pad;
+      }
+
+      function makeNumpadKey(cell) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "key" + (cell.cls ? " " + cell.cls : "");
+        btn.style.gridColumn = cell.colSpan ? `${cell.col} / span ${cell.colSpan}` : `${cell.col}`;
+        btn.style.gridRow = cell.rowSpan ? `${cell.row} / span ${cell.rowSpan}` : `${cell.row}`;
+        if (cell.a !== undefined) btn.dataset.ascii = cell.a;
+        if (cell.sp) btn.dataset.special = cell.sp;
+        const main = document.createElement("span");
+        main.textContent = cell.label ?? cell.a;
+        btn.appendChild(main);
+        if (cell.sub !== undefined) {
+          const sub = document.createElement("span");
+          sub.className = "zh";
+          sub.textContent = cell.sub;
+          btn.appendChild(sub);
+        }
+        if (cell.inert) return btn;
+        // 純視覺回饋;不 preventDefault 以保留瀏覽器雙點縮放偵測。
+        btn.addEventListener("pointerdown", () => btn.classList.add("pressed"));
+        const release = () => btn.classList.remove("pressed");
+        btn.addEventListener("pointerup", release);
+        btn.addEventListener("pointercancel", release);
+        btn.addEventListener("pointerleave", release);
+        btn.addEventListener("click", () => {
+          if (cell.sp) feedSpecial(cell.sp);
+          else if (cell.kp) feedKeypad(cell.a);
+        });
+        return btn;
+      }
+
       // 短按 vs 長按閾值
       const LONG_PRESS_MS = 300;
 
@@ -1286,6 +1682,14 @@
         if (demo.feedSpecial(name, modBits())) {
           render();
         }
+      }
+
+      // 數字鍵盤鍵:走 wasm 的 keypad path,引擎以 KP keysym + NumLock 解讀,
+      // 直接送出數字/運算子 (或在選字時依數字選詞),而非當作注音。
+      function feedKeypad(ch) {
+        if (typeof ch !== "string" || ch.length !== 1) return;
+        demo.feedKeypad(ch.charCodeAt(0), modBits());
+        render();
       }
 
       // 表單任何欄位變動 (含 color picker、checkbox、select) 都立即保存,
@@ -1473,6 +1877,18 @@
           e.preventDefault();
           if (demo.feedSpecial(mapped, mods)) render();
           return;
+        }
+        // 實體數字鍵盤 (NumLock 開啟,e.key 為數字/運算子) → keypad path,
+        // 與螢幕小鍵盤一致送出數字而非注音。NumLock 關閉時 e.key 會是
+        // Home/ArrowUp/... 已由上方 PHYSICAL_SPECIAL 處理。
+        if (e.code && e.code.startsWith("Numpad") && e.key.length === 1) {
+          const code = e.key.charCodeAt(0);
+          if (code >= 0x20 && code <= 0x7e) {
+            e.preventDefault();
+            demo.feedKeypad(code, mods);
+            render();
+            return;
+          }
         }
         if (e.key.length === 1 && e.key.charCodeAt(0) >= 0x20 && e.key.charCodeAt(0) <= 0x7e) {
           e.preventDefault();

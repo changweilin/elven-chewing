@@ -120,6 +120,17 @@ BEGIN
     BEGIN
         MENUITEM "安裝本地新版本 (&U)",                  ID_CHECK_NEW_VER
         MENUITEM "關於精靈語輸入法(&A)",                ID_ABOUT
+        POPUP "About Me (&M)"
+        BEGIN
+            MENUITEM "Chang Wei Lin",                       ID_ABOUT_ME_NAME, GRAYED
+            MENUITEM "我愛星空至深，無懼黑夜。",              ID_ABOUT_ME_QUOTE_ZH, GRAYED
+            MENUITEM "We have loved the stars too fondly to fear the dark.", ID_ABOUT_ME_QUOTE_EN, GRAYED
+            MENUITEM "— <The Old Astronomer> Sarah Williams", ID_ABOUT_ME_SOURCE, GRAYED
+            MENUITEM SEPARATOR
+            MENUITEM "GitHub",                              ID_ABOUT_ME_GITHUB
+            MENUITEM "LinkedIn",                            ID_ABOUT_ME_LINKEDIN
+            MENUITEM "Demo Link",                           ID_ABOUT_ME_DEMO
+        END
         MENUITEM "參觀精靈語輸入法官方網站(&W)",         ID_WEBSITE
         MENUITEM "精靈語輸入法線上討論區(&G)",          ID_GROUP
         MENUITEM SEPARATOR

@@ -1168,6 +1168,11 @@ impl ChewingTextService {
                     }
                 }
                 ID_ABOUT => open_url("elven-ime-preferences://about"),
+                ID_ABOUT_ME_GITHUB => open_url("https://github.com/changweilin"),
+                ID_ABOUT_ME_LINKEDIN => {
+                    open_url("https://www.linkedin.com/in/wei-lin-chang-ba38049a/")
+                }
+                ID_ABOUT_ME_DEMO => open_url("https://changweilin.github.io/demo_link/"),
                 ID_WEBSITE => open_url("https://chewing.im/"),
                 ID_GROUP => open_url("https://groups.google.com/group/chewing-devel"),
                 ID_BUGREPORT => open_url("https://codeberg.org/chewing/windows-chewing-tsf/issues"),

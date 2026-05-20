@@ -20,7 +20,7 @@ use chewing::editor::{BasicEditor, CharacterForm, Editor, LanguageMode};
 use chewing::input::KeyboardEvent;
 use chewing::input::keycode::{self, Keycode};
 use chewing::input::keysym::{self, Keysym};
-use chewing_engine_kit::keysim::{Special, qwerty};
+use chewing_engine_kit::keysim::{Special, keypad, qwerty};
 use chewing_engine_kit::{EmbeddedDicts, EngineConfig, build_editor_embedded};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -397,6 +397,19 @@ impl ChewingDemo {
             self.editor
                 .set_editor_options(|opt| opt.language_mode = old);
         } else {
+            self.feed_event_with_mods(evt, modifiers);
+        }
+    }
+
+    /// Feed one numeric-keypad key (`0`–`9`, `+`, `-`, `*`, `/`, `.`, `=`).
+    /// Unlike [`Self::feed_ascii`], keypad bytes are never reinterpreted as
+    /// 注音 or selection keys: the engine commits the literal character when the
+    /// buffer is empty, inserts it mid-composition, or — if a candidate window
+    /// is open — selects by that number, exactly like a physical numpad on the
+    /// desktop IME. Bytes outside the keypad set are ignored.
+    #[wasm_bindgen(js_name = feedKeypad)]
+    pub fn feed_keypad(&mut self, byte: u8, modifiers: u32) {
+        if let Some(evt) = keypad(byte) {
             self.feed_event_with_mods(evt, modifiers);
         }
     }

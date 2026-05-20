@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="精靈語輸入法">
+  <defs>
+    <linearGradient id="elf-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#225139"/>
+      <stop offset="1" stop-color="#12382c"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="100" height="100" rx="22" fill="url(#elf-bg)"/>
+  <rect x="4.5" y="4.5" width="91" height="91" rx="18" fill="none" stroke="#d0a24a" stroke-width="1.4" opacity="0.85"/>
+  <!-- 中文 tengwa (shared with the Windows tray glyph), mithril -->
+  <g transform="translate(22 24) scale(0.6)" fill="none" stroke="#e8eee9"
+     stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M42 16C42 40 42 62 42 84"/>
+    <path d="M42 50C80 48 82 90 42 86"/>
+    <path d="M42 20C28 10 20 22 34 30"/>
+  </g>
+  <!-- gold sparkle -->
+  <path d="M74 19 L76.4 24.6 L82 27 L76.4 29.4 L74 35 L71.6 29.4 L66 27 L71.6 24.6 Z" fill="#d8b760"/>
+</svg>

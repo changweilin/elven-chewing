@@ -7,7 +7,7 @@
 //! * [`special`] — build a special-key event (arrows, return, esc, space) by
 //!   name. These have no ASCII representation in libchewing's keymap.
 
-use chewing::input::keymap::{Keymap, QWERTY_MAP, map_ascii};
+use chewing::input::keymap::{KEYPAD_MAP, Keymap, QWERTY_MAP, map_ascii};
 use chewing::input::{KeyboardEvent, keycode, keysym};
 
 /// Translate every byte of `text` through `keymap`, dropping bytes that yield
@@ -23,6 +23,17 @@ pub fn ascii_seq(keymap: &Keymap, text: &[u8]) -> Vec<KeyboardEvent> {
 /// Convenience wrapper that always uses the QWERTY keymap.
 pub fn qwerty(text: &[u8]) -> Vec<KeyboardEvent> {
     ascii_seq(&QWERTY_MAP, text)
+}
+
+/// Translate a numeric-keypad byte — a digit `0`–`9` or one of `+ - * / . =` —
+/// into its libchewing keypad event. The returned event carries the dedicated
+/// `KP*` keysym and `NumLock` state, so the engine emits the literal character
+/// (or selects a candidate, when a candidate window is open) instead of routing
+/// the byte through the注音 layout the way [`qwerty`] would — i.e. it behaves
+/// like a physical numpad. Returns `None` for bytes with no keypad equivalent.
+pub fn keypad(byte: u8) -> Option<KeyboardEvent> {
+    let evt = map_ascii(&KEYPAD_MAP, byte);
+    (evt != KeyboardEvent::default()).then_some(evt)
 }
 
 /// Named special keys used by the chewing state machine.
