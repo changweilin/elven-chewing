@@ -16,6 +16,7 @@
 //! Chinese output, ...) are interpreted in this crate, the same way
 //! `tip::text_service::chewing` does on Windows.
 
+use chewing::dictionary::LookupStrategy;
 use chewing::editor::{BasicEditor, CharacterForm, Editor, EditorKeyBehavior, LanguageMode};
 use chewing::input::KeyboardEvent;
 use chewing::input::keycode::{self, Keycode};
@@ -514,6 +515,10 @@ impl ChewingDemo {
     /// string when there is nothing safe to replace.
     #[wasm_bindgen(js_name = reconvertLastCommit)]
     pub fn reconvert_last_commit(&mut self) -> String {
+        if let Some(result) = self.reconvert_active_composition_to_english() {
+            return result;
+        }
+
         let Some(last) = self.last_reconvert.take() else {
             return String::new();
         };
@@ -540,6 +545,10 @@ impl ChewingDemo {
             mode: new_mode,
         });
         self.editor.ack();
+        Self::reconvert_result_json(delete_chars, &replacement)
+    }
+
+    fn reconvert_result_json(delete_chars: usize, replacement: &str) -> String {
         serde_json::json!({
             "delete_chars": delete_chars,
             "replacement": replacement,
@@ -585,6 +594,31 @@ impl ChewingDemo {
         evt.state |= modifiers;
         settle_partial_syllable_before_navigation(&mut self.editor, &evt);
         self.editor.process_keyevent(evt)
+    }
+
+    fn reconvert_active_composition_to_english(&mut self) -> Option<String> {
+        if self.current_language_mode() != LanguageMode::Chinese
+            || self.pending_key_events.is_empty()
+            || self.is_selecting()
+            || (self.editor.is_empty() && !self.editor.entering_syllable())
+        {
+            return None;
+        }
+
+        let key_events = std::mem::take(&mut self.pending_key_events);
+        let replacement = Self::event_text(&key_events);
+        if replacement.is_empty() {
+            self.pending_key_events = key_events;
+            return None;
+        }
+
+        self.editor.clear();
+        self.last_reconvert = Some(LastCommitSnapshot {
+            key_events,
+            committed_text: replacement.clone(),
+            mode: LanguageMode::English,
+        });
+        Some(Self::reconvert_result_json(0, &replacement))
     }
 
     fn maybe_simp(&self, s: String) -> String {
@@ -668,6 +702,7 @@ impl ChewingDemo {
             self.editor
                 .process_keyevent(Self::normalize_replay_event(evt));
         }
+        Self::settle_partial_syllable_for_commit(&mut self.editor);
         let out = if self.editor.commit().is_ok() {
             Some(self.maybe_simp(self.editor.display_commit().to_string()))
         } else {
@@ -680,6 +715,23 @@ impl ChewingDemo {
         self.editor
             .set_editor_options(|opt| opt.language_mode = old_mode);
         out
+    }
+
+    fn settle_partial_syllable_for_commit(editor: &mut Editor) {
+        if editor.editor_options().lookup_strategy != LookupStrategy::FuzzyPartialPrefix
+            || !editor.entering_syllable()
+        {
+            return;
+        }
+
+        let down = KeyboardEvent::builder()
+            .code(keycode::KEY_DOWN)
+            .ksym(keysym::SYM_DOWN)
+            .build();
+        editor.process_keyevent(down);
+        if editor.is_selecting() {
+            let _ = editor.cancel_selecting();
+        }
     }
 
     fn current_language_mode(&self) -> LanguageMode {
@@ -829,5 +881,42 @@ mod tests {
         let raw = demo.reconvert_last_commit();
         let result: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!("hk4", result["replacement"].as_str().unwrap());
+    }
+
+    #[test]
+    fn reconvert_active_chinese_composition_restores_raw_keys() {
+        let mut demo = ChewingDemo::new();
+
+        for byte in b"test" {
+            demo.feed_ascii(*byte, 0);
+        }
+
+        let raw = demo.reconvert_last_commit();
+        let result: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(Some(0), result["delete_chars"].as_u64());
+        assert_eq!("test", result["replacement"].as_str().unwrap());
+        assert!(demo.display().is_empty());
+    }
+
+    #[test]
+    fn reconvert_english_initials_phrase_settles_partial_prefix() {
+        let mut demo = ChewingDemo::new();
+        let mut cfg = super::DemoConfig::default();
+        cfg.partial_syllable_match = true;
+        demo.apply_config(&serde_json::to_string(&cfg).unwrap())
+            .unwrap();
+        demo.toggle_lang_mode();
+        let mut doc = String::new();
+
+        for byte in b"5cae" {
+            demo.feed_ascii(*byte, 0);
+            drain_commit(&mut demo, &mut doc);
+        }
+        assert_eq!("5cae", doc);
+
+        let raw = demo.reconvert_last_commit();
+        let result: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(Some(4), result["delete_chars"].as_u64());
+        assert_eq!("中華民國", result["replacement"].as_str().unwrap());
     }
 }

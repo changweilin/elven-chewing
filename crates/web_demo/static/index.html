@@ -1760,7 +1760,7 @@
         }
         const deleteChars = Number(result.delete_chars || 0);
         const replacement = String(result.replacement || "");
-        if (deleteChars <= 0 || !replacement) return false;
+        if (deleteChars < 0 || !replacement) return false;
         const chars = Array.from(commitLog.textContent);
         chars.splice(Math.max(0, chars.length - deleteChars), deleteChars, replacement);
         commitLog.textContent = chars.join("");

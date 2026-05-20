@@ -1503,6 +1503,9 @@ impl ChewingTextService {
     /// have produced. Toggling again reverses the swap.
     fn on_reconvert_last_commit(&mut self, context: &ITfContext) -> Result<()> {
         if self.is_composing() {
+            if self.reconvert_active_composition_to_english(context)? {
+                return Ok(());
+            }
             debug!("reconvert: skip - currently composing");
             return Ok(());
         }
@@ -1552,6 +1555,32 @@ impl ChewingTextService {
         Ok(())
     }
 
+    fn reconvert_active_composition_to_english(&mut self, context: &ITfContext) -> Result<bool> {
+        if self.current_language_mode() != LanguageMode::Chinese
+            || self.pending_key_events.is_empty()
+            || self.chewing_editor.is_selecting()
+            || (self.chewing_editor.is_empty() && !self.chewing_editor.entering_syllable())
+        {
+            return Ok(false);
+        }
+
+        let key_events = mem::take(&mut self.pending_key_events);
+        let replacement = Self::event_text(&key_events);
+        if replacement.is_empty() {
+            self.pending_key_events = key_events;
+            return Ok(false);
+        }
+
+        self.chewing_editor.clear();
+        self.last_reconvert = Some(LastCommitSnapshot {
+            key_events,
+            committed_text: replacement.clone(),
+            mode: LanguageMode::English,
+        });
+        self.update_preedit(context, replacement)?;
+        Ok(true)
+    }
+
     /// Replay key events through the chewing engine in Chinese mode to get
     /// the bopomofo-composed text. Requires `!self.is_composing()` so the
     /// editor state is clean.
@@ -1565,6 +1594,7 @@ impl ChewingTextService {
             self.chewing_editor
                 .process_keyevent(Self::normalize_replay_event(evt));
         }
+        Self::settle_partial_syllable_for_commit(&mut self.chewing_editor);
         let result = (|| {
             self.chewing_editor.commit()?;
             let mut out = self.chewing_editor.display_commit().to_owned();
@@ -1581,6 +1611,23 @@ impl ChewingTextService {
         self.chewing_editor
             .set_editor_options(|opt| opt.language_mode = old_mode);
         result
+    }
+
+    fn settle_partial_syllable_for_commit(editor: &mut Editor) {
+        if editor.editor_options().lookup_strategy != LookupStrategy::FuzzyPartialPrefix
+            || !editor.entering_syllable()
+        {
+            return;
+        }
+
+        let down = KeyboardEvent::builder()
+            .code(keycode::KEY_DOWN)
+            .ksym(keysym::SYM_DOWN)
+            .build();
+        editor.process_keyevent(down);
+        if editor.is_selecting() {
+            let _ = editor.cancel_selecting();
+        }
     }
 
     /// 雙排模式: 餵入一個 ASCII 字元到英文軌
