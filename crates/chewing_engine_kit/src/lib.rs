@@ -22,9 +22,10 @@ use chewing::conversion::{ChewingEngine, FuzzyChewingEngine, SimpleEngine};
 use chewing::dictionary::{Dictionary, Layered, LookupStrategy, Trie};
 use chewing::editor::zhuyin_layout::{KeyboardLayoutCompat, SyllableEditor};
 use chewing::editor::{
-    AbbrevTable, ConversionEngineKind, Editor, LaxUserFreqEstimate, SymbolSelector,
+    AbbrevTable, BasicEditor, ConversionEngineKind, Editor, LaxUserFreqEstimate, SymbolSelector,
     UserPhraseAddDirection,
 };
+use chewing::input::{KeyboardEvent, keycode, keysym};
 
 pub mod keysim;
 
@@ -110,12 +111,50 @@ pub fn build_editor(config: &EngineConfig, paths: &EnginePaths<'_>) -> Editor {
                 .join(&sep.to_string()),
         )
     };
-    let user_dict = paths
-        .user_dict
-        .map(|p| p.to_string_lossy().into_owned());
+    let user_dict = paths.user_dict.map(|p| p.to_string_lossy().into_owned());
 
     let editor = Editor::chewing(search_path, user_dict, paths.enabled_dicts);
     configure_editor(editor, config)
+}
+
+/// In partial-prefix mode, a second still-incomplete syllable can sit in the
+/// syllable editor while the first one is already in the composition editor.
+/// Before cursor navigation, materialize that partial syllable so navigation
+/// operates on the same two visible syllables the user sees.
+pub fn settle_partial_syllable_before_navigation(editor: &mut Editor, evt: &KeyboardEvent) -> bool {
+    if editor.editor_options().lookup_strategy != LookupStrategy::FuzzyPartialPrefix
+        || editor.is_selecting()
+        || !editor.entering_syllable()
+        || editor.is_empty()
+        || evt.has_modifiers()
+        || !is_cursor_navigation_key(evt)
+    {
+        return false;
+    }
+
+    let before_len = editor.len();
+    let down = KeyboardEvent::builder()
+        .code(keycode::KEY_DOWN)
+        .ksym(keysym::SYM_DOWN)
+        .build();
+    editor.process_keyevent(down);
+    if editor.is_selecting() {
+        let _ = editor.cancel_selecting();
+    }
+
+    editor.len() > before_len
+}
+
+fn is_cursor_navigation_key(evt: &KeyboardEvent) -> bool {
+    matches!(
+        evt.ksym,
+        keysym::SYM_LEFT
+            | keysym::SYM_RIGHT
+            | keysym::SYM_HOME
+            | keysym::SYM_END
+            | keysym::SYM_PAGEUP
+            | keysym::SYM_PAGEDOWN
+    )
 }
 
 /// Dictionary payloads already resident in memory, for targets without a
@@ -183,7 +222,10 @@ fn configure_editor(mut editor: Editor, config: &EngineConfig) -> Editor {
             ConversionEngineKind::FuzzyChewingEngine,
             LookupStrategy::FuzzyPartialPrefix,
         ),
-        _ => (ConversionEngineKind::ChewingEngine, LookupStrategy::Standard),
+        _ => (
+            ConversionEngineKind::ChewingEngine,
+            LookupStrategy::Standard,
+        ),
     };
     let (conv_kind, lookup) = if config.partial_syllable_match {
         (

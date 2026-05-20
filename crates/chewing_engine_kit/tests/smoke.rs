@@ -8,7 +8,10 @@ use std::path::{Path, PathBuf};
 
 use chewing::editor::BasicEditor;
 use chewing_engine_kit::keysim::qwerty;
-use chewing_engine_kit::{EmbeddedDicts, EngineConfig, EnginePaths, build_editor, build_editor_embedded};
+use chewing_engine_kit::{
+    EmbeddedDicts, EngineConfig, EnginePaths, build_editor, build_editor_embedded,
+    settle_partial_syllable_before_navigation,
+};
 use tempfile::TempDir;
 
 fn fixtures_dir() -> PathBuf {
@@ -113,6 +116,94 @@ fn partial_syllable_match_with_no_search_dirs_uses_minidat() {
 }
 
 #[test]
+fn partial_syllable_navigation_keeps_two_syllable_candidates() {
+    use std::io::{Cursor, Seek};
+
+    use chewing::conversion::FuzzyChewingEngine;
+    use chewing::dictionary::{
+        DictionaryBuilder, Layered, LookupStrategy, Trie, TrieBuf, TrieBuilder, TrieOpenOptions,
+    };
+    use chewing::editor::{
+        AbbrevTable, ConversionEngineKind, Editor, LaxUserFreqEstimate, SymbolSelector,
+    };
+    use chewing::input::{KeyboardEvent, keycode, keysym};
+    use chewing::zhuyin::Bopomofo;
+
+    let mut builder = TrieBuilder::new();
+    builder
+        .insert(
+            &[chewing::syl![Bopomofo::SH, Bopomofo::TONE4]],
+            ("是", 100).into(),
+        )
+        .unwrap();
+    builder
+        .insert(
+            &[chewing::syl![Bopomofo::Q, Bopomofo::I, Bopomofo::TONE4]],
+            ("氣", 100).into(),
+        )
+        .unwrap();
+    builder
+        .insert(
+            &[
+                chewing::syl![Bopomofo::SH, Bopomofo::TONE4],
+                chewing::syl![Bopomofo::Q, Bopomofo::I, Bopomofo::TONE4],
+            ],
+            ("士氣", 200).into(),
+        )
+        .unwrap();
+    let mut cursor = Cursor::new(vec![]);
+    builder.write(&mut cursor).unwrap();
+    cursor.rewind().unwrap();
+    let dict: Trie = TrieOpenOptions::new().read_from(&mut cursor).unwrap();
+    let dict = Layered::new(vec![Box::new(dict), Box::new(TrieBuf::new_in_memory())]);
+    let mut editor = Editor::new(
+        Box::new(FuzzyChewingEngine::new()),
+        dict,
+        LaxUserFreqEstimate::new(0),
+        AbbrevTable::new(),
+        SymbolSelector::default(),
+    );
+    editor.set_editor_options(|opt| {
+        opt.conversion_engine = ConversionEngineKind::FuzzyChewingEngine;
+        opt.lookup_strategy = LookupStrategy::FuzzyPartialPrefix;
+        opt.phrase_choice_rearward = true;
+        opt.auto_snapshot_selections = true;
+    });
+
+    // QWERTY 'g f' = partial initials ㄕ ㄑ. Moving left before opening
+    // candidates should still allow selecting a two-syllable phrase.
+    for evt in qwerty(b"gf") {
+        editor.process_keyevent(evt);
+    }
+
+    let left = KeyboardEvent::builder()
+        .code(keycode::KEY_LEFT)
+        .ksym(keysym::SYM_LEFT)
+        .build();
+    assert!(editor.entering_syllable());
+    assert_eq!(1, editor.len());
+    assert!(settle_partial_syllable_before_navigation(
+        &mut editor,
+        &left
+    ));
+    assert!(!editor.entering_syllable());
+    assert_eq!(2, editor.len());
+    editor.process_keyevent(left);
+
+    let down = KeyboardEvent::builder()
+        .code(keycode::KEY_DOWN)
+        .ksym(keysym::SYM_DOWN)
+        .build();
+    editor.process_keyevent(down);
+
+    let cands = editor.paginated_candidates().unwrap_or_default();
+    assert!(
+        cands.contains(&"士氣".to_string()),
+        "partial initials plus Left/Down should offer the two-syllable candidate, got {cands:?}"
+    );
+}
+
+#[test]
 fn keypad_commits_literal_digit() {
     use chewing_engine_kit::keysim::keypad;
     let tmp = TempDir::new().unwrap();
@@ -145,7 +236,10 @@ fn keypad_digit_selects_candidate_during_selection() {
     editor.process_keyevent(down);
 
     let cands = editor.paginated_candidates().unwrap_or_default();
-    assert!(cands.len() >= 2, "ㄘㄜˋ should offer at least two candidates");
+    assert!(
+        cands.len() >= 2,
+        "ㄘㄜˋ should offer at least two candidates"
+    );
     let first = cands[0].clone();
 
     // Keypad '1' selects candidate #1, exactly like the main-row digit would.

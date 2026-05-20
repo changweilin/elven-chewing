@@ -21,7 +21,9 @@ use chewing::input::KeyboardEvent;
 use chewing::input::keycode::{self, Keycode};
 use chewing::input::keysym::{self, Keysym};
 use chewing_engine_kit::keysim::{Special, keypad, qwerty};
-use chewing_engine_kit::{EmbeddedDicts, EngineConfig, build_editor_embedded};
+use chewing_engine_kit::{
+    EmbeddedDicts, EngineConfig, build_editor_embedded, settle_partial_syllable_before_navigation,
+};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use zhconv::{Variant, zhconv};
@@ -353,8 +355,7 @@ impl ChewingDemo {
 
         // 純英文 + 半形, 直接送 ASCII (走 libchewing 的 English path 會 echo char).
         let in_english_mode = self.lang_mode == LangMode::English;
-        let half_shape =
-            self.editor.editor_options().character_form == CharacterForm::Halfwidth;
+        let half_shape = self.editor.editor_options().character_form == CharacterForm::Halfwidth;
         if in_english_mode && half_shape && !self.is_selecting() {
             self.feed_event_with_mods(byte_to_event(byte), modifiers);
             return;
@@ -503,6 +504,7 @@ impl ChewingDemo {
 
     fn feed_event_with_mods(&mut self, mut evt: KeyboardEvent, modifiers: u32) {
         evt.state |= modifiers;
+        settle_partial_syllable_before_navigation(&mut self.editor, &evt);
         self.editor.process_keyevent(evt);
     }
 
@@ -542,14 +544,11 @@ impl ChewingDemo {
 /// when it shouldn't go through the bopomofo layout — caller takes care of
 /// that via [`special_event`] / [`Special::Space`]).
 fn byte_to_event(byte: u8) -> KeyboardEvent {
-    qwerty(&[byte])
-        .into_iter()
-        .next()
-        .unwrap_or_else(|| {
-            let mut b = KeyboardEvent::builder();
-            b.ksym(Keysym(byte as u32));
-            b.build()
-        })
+    qwerty(&[byte]).into_iter().next().unwrap_or_else(|| {
+        let mut b = KeyboardEvent::builder();
+        b.ksym(Keysym(byte as u32));
+        b.build()
+    })
 }
 
 fn fresh_editor(cfg: &EngineConfig) -> Editor {
@@ -608,4 +607,3 @@ fn special_event(name: &str) -> Option<KeyboardEvent> {
     b.code(code).ksym(ksym);
     Some(b.build())
 }
-

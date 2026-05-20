@@ -764,6 +764,7 @@ impl ChewingTextService {
             if evt.ksym == SYM_BACKSPACE {
                 self.pending_keystrokes.pop();
             }
+            self.settle_partial_syllable_before_navigation(&evt);
             let mut key_handled = false;
             if self.cfg.chewing_tsf.cursor_cand_list
                 && let Some(candidate_list) = &self.candidate_list
@@ -1436,8 +1437,7 @@ impl ChewingTextService {
             return Ok(());
         }
         let session_text: HSTRING = replacement.as_str().into();
-        let session =
-            ReplaceBackwards::new(context.clone(), backwards, session_text).into_object();
+        let session = ReplaceBackwards::new(context.clone(), backwards, session_text).into_object();
         request_edit_session(
             context,
             self.tid,
@@ -1730,7 +1730,10 @@ impl ChewingTextService {
                     ConversionEngineKind::FuzzyChewingEngine,
                     LookupStrategy::FuzzyPartialPrefix,
                 ),
-                _ => (ConversionEngineKind::ChewingEngine, LookupStrategy::Standard),
+                _ => (
+                    ConversionEngineKind::ChewingEngine,
+                    LookupStrategy::Standard,
+                ),
             };
             self.chewing_editor.set_editor_options(|opt| {
                 opt.conversion_engine = engine_kind;
@@ -2039,8 +2042,7 @@ impl ChewingTextService {
             .unwrap_or(KeyboardLayoutCompat::Default);
         self.chewing_editor = Self::build_editor_from_cfg(cfg, self.partial_syllable_match)?;
         let _ = self.update_lang_buttons();
-        let dual_track_keybind_active =
-            cfg.dual_input_mode && cfg.dual_track_switch_with_keybind;
+        let dual_track_keybind_active = cfg.dual_input_mode && cfg.dual_track_switch_with_keybind;
         let keybindings = cfg
             .keybind
             .iter()
@@ -2121,6 +2123,43 @@ impl ChewingTextService {
             }
         };
         evt
+    }
+
+    fn settle_partial_syllable_before_navigation(&mut self, evt: &KeyboardEvent) -> bool {
+        if self.chewing_editor.editor_options().lookup_strategy
+            != LookupStrategy::FuzzyPartialPrefix
+            || self.chewing_editor.is_selecting()
+            || !self.chewing_editor.entering_syllable()
+            || self.chewing_editor.is_empty()
+            || evt.has_modifiers()
+            || !Self::is_cursor_navigation_key(evt)
+        {
+            return false;
+        }
+
+        let before_len = self.chewing_editor.len();
+        let down = KeyboardEvent::builder()
+            .code(keycode::KEY_DOWN)
+            .ksym(keysym::SYM_DOWN)
+            .build();
+        self.chewing_editor.process_keyevent(down);
+        if self.chewing_editor.is_selecting() {
+            let _ = self.chewing_editor.cancel_selecting();
+        }
+
+        self.chewing_editor.len() > before_len
+    }
+
+    fn is_cursor_navigation_key(evt: &KeyboardEvent) -> bool {
+        matches!(
+            evt.ksym,
+            keysym::SYM_LEFT
+                | keysym::SYM_RIGHT
+                | keysym::SYM_HOME
+                | keysym::SYM_END
+                | keysym::SYM_PAGEUP
+                | keysym::SYM_PAGEDOWN
+        )
     }
 }
 
