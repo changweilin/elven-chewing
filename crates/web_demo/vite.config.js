@@ -16,6 +16,7 @@ export default defineConfig({
     allowedHosts: [".ts.net", "localhost"],
   },
   build: {
+    target: "es2022",
     outDir: "../dist",
     emptyOutDir: true,
   },

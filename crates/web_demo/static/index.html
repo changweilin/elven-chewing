@@ -146,6 +146,28 @@
         color: var(--muted);
       }
       .panel h2 .glyph { color: var(--gold); width: 1em; height: 1em; }
+      .panel h2 .panel-action {
+        margin-left: auto;
+        width: 1.75rem;
+        height: 1.75rem;
+        padding: 0;
+        display: inline-grid;
+        place-items: center;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: var(--surface-solid);
+        color: var(--muted);
+        cursor: pointer;
+        box-shadow: none;
+        transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.05s;
+      }
+      .panel h2 .panel-action:hover {
+        border-color: var(--accent);
+        color: var(--accent-strong);
+        background: var(--accent-soft);
+      }
+      .panel h2 .panel-action:active { transform: translateY(1px); }
+      .panel h2 .panel-action .glyph { color: currentColor; width: 0.95rem; height: 0.95rem; }
       .preedit {
         font-size: 1.6rem;
         min-height: 2.2rem;
@@ -636,6 +658,12 @@
       <symbol id="g-spark" viewBox="0 0 100 100">
         <path fill="currentColor" d="M50 18L57 43L82 50L57 57L50 82L43 57L18 50L43 43Z"/>
       </symbol>
+      <symbol id="g-clear" viewBox="0 0 100 100">
+        <g fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M28 28L72 72"/>
+          <path d="M72 28L28 72"/>
+        </g>
+      </symbol>
     </svg>
 
     <header>
@@ -683,7 +711,12 @@
       </section>
 
       <section class="panel area-commit">
-        <h2><svg class="glyph"><use href="#g-leaf"></use></svg>已提交文字</h2>
+        <h2>
+          <svg class="glyph"><use href="#g-leaf"></use></svg>已提交文字
+          <button type="button" class="panel-action" id="clear-commit-log" title="清空已提交文字" aria-label="清空已提交文字">
+            <svg class="glyph"><use href="#g-clear"></use></svg>
+          </button>
+        </h2>
         <div id="commit-log" class="commit-log"></div>
       </section>
 
@@ -1283,6 +1316,7 @@
       // --- 渲染 ---
       const preedit = document.getElementById("preedit");
       const commitLog = document.getElementById("commit-log");
+      const clearCommitLogBtn = document.getElementById("clear-commit-log");
       const cands = document.getElementById("candidates");
       const form = document.getElementById("settings-form");
       const clearBtn = document.getElementById("clear-buffer");
@@ -1390,6 +1424,18 @@
         t.classList.add("show");
         clearTimeout(showToast._h);
         showToast._h = setTimeout(() => t.classList.remove("show"), 1400);
+      }
+      function handleShortShiftPress() {
+        if (!currentCfg.switch_lang_with_shift) return false;
+        if (currentCfg.enable_caps_lock) {
+          // 桌面 IME: 當 enable_caps_lock 開啟時, Shift 只做提示, 不切換。
+          showToast(demo.langMode() === "chi" ? "大寫鎖定於中文模式" : "大寫鎖定於英數模式");
+        } else {
+          demo.toggleLangMode();
+          showToast(demo.langMode() === "chi" ? "中文模式" : "英數模式");
+        }
+        render();
+        return true;
       }
       function escapeHtml(s) {
         return String(s).replace(/[&<>"']/g, c => ({
@@ -1623,6 +1669,9 @@
             if (wasLatched) {
               // 對已 latched 的 modifier 再次點按 (不論長短) → 解除鎖定。
               modState.latched &= ~bit;
+            } else if (cell.mod === "SHIFT" && dt > 0 && dt < LONG_PRESS_MS) {
+              // 虛擬鍵盤短按 Shift 也要與實體鍵盤一致: 切換中英。
+              handleShortShiftPress();
             } else if (dt >= LONG_PRESS_MS) {
               // 從 idle 長按 → 鎖定，放開後仍持續按住。
               modState.latched |= bit;
@@ -1811,6 +1860,11 @@
         render();
       });
 
+      clearCommitLogBtn.addEventListener("click", () => {
+        commitLog.textContent = "";
+        commitLog.scrollTop = 0;
+      });
+
       // Lang bar 互動
       document.getElementById("pill-lang").addEventListener("click", () => {
         demo.toggleLangMode();
@@ -1860,8 +1914,20 @@
         if (e.getModifierState && e.getModifierState("CapsLock")) b |= MOD.CAPSLOCK;
         return b;
       }
+      function shouldIgnorePhysicalKeyTarget(target) {
+        if (!(target instanceof Element)) return false;
+        if (target.matches("input, select, textarea") || target.isContentEditable) return true;
+        const button = target.closest("button");
+        return !!button && !button.closest("#virtual-keyboard");
+      }
       window.addEventListener("keydown", (e) => {
-        if (e.target.matches("input, select, textarea, button")) return;
+        if (shouldIgnorePhysicalKeyTarget(e.target)) {
+          if (e.key === "Shift") {
+            shiftDownAt = 0;
+            shiftAccompaniedByKey = false;
+          }
+          return;
+        }
 
         // 偵測 Shift 短按 (switch_lang_with_shift)
         if (e.key === "Shift") {
@@ -1899,6 +1965,11 @@
 
       window.addEventListener("keyup", (e) => {
         if (e.key !== "Shift") return;
+        if (shouldIgnorePhysicalKeyTarget(e.target)) {
+          shiftDownAt = 0;
+          shiftAccompaniedByKey = false;
+          return;
+        }
         const dt = performance.now() - shiftDownAt;
         shiftDownAt = 0;
         if (
@@ -1906,14 +1977,7 @@
           && currentCfg.switch_lang_with_shift
           && dt > 0 && dt < (currentCfg.shift_key_sensitivity || 200)
         ) {
-          if (currentCfg.enable_caps_lock) {
-            // 桌面 IME: 當 enable_caps_lock 開啟時, Shift 只做提示, 不切換
-            showToast(demo.langMode() === "chi" ? "大寫鎖定於中文模式" : "大寫鎖定於英數模式");
-          } else {
-            demo.toggleLangMode();
-            showToast(demo.langMode() === "chi" ? "中文模式" : "英數模式");
-          }
-          render();
+          handleShortShiftPress();
         }
       });
 
