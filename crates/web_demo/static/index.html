@@ -30,6 +30,8 @@
         --gold: #b07d2e;
         --key-bg: rgba(255, 255, 255, 0.9);
         --key-border: rgba(31, 77, 63, 0.28);
+        --key-fg: var(--fg);
+        --key-muted: var(--muted);
         --special-bg: rgba(31, 77, 63, 0.08);
         --pressed-bg: rgba(31, 107, 79, 0.22);
         --latched-bg: rgba(200, 162, 74, 0.3);
@@ -54,6 +56,8 @@
           --gold: #d8b760;
           --key-bg: rgba(40, 54, 47, 0.85);
           --key-border: rgba(223, 231, 226, 0.22);
+          --key-fg: #f4faf6;
+          --key-muted: #c4d3cc;
           --special-bg: rgba(223, 231, 226, 0.07);
           --pressed-bg: rgba(88, 199, 154, 0.28);
           --latched-bg: rgba(216, 183, 96, 0.26);
@@ -469,6 +473,7 @@
         align-items: center; justify-content: center;
         line-height: 1.05;
         font-size: 0.92rem;
+        color: var(--key-fg);
         box-sizing: border-box;
       }
       .key.label-sm { font-size: 0.75rem; }
@@ -483,14 +488,14 @@
       }
       .key .zh {
         font-size: 0.65rem;
-        color: var(--muted);
+        color: var(--key-muted);
         margin-top: 2px;
         font-family: "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
       }
-      .key.special .zh { color: var(--muted); }
+      .key.special .zh { color: var(--key-muted); }
       .key .shifted {
         font-size: 0.6rem;
-        color: var(--muted);
+        color: var(--key-muted);
         margin-bottom: 1px;
       }
 
@@ -534,11 +539,11 @@
         align-items: center;
         justify-content: center;
         line-height: 1;
-        color: var(--fg);
+        color: var(--key-fg);
       }
       .key-stack .key-half.top {
         border-bottom: 1px solid var(--key-border);
-        color: var(--muted);
+        color: var(--key-muted);
         font-size: 0.72rem;
       }
       .key-stack .key-half.pressed {
@@ -546,7 +551,7 @@
       }
       .key-stack .key-half .zh {
         font-size: 0.55rem;
-        color: var(--muted);
+        color: var(--key-muted);
         margin-top: 1px;
         font-family: "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
       }
