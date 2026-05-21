@@ -16,7 +16,7 @@ The bundle embeds the real libchewing dictionaries (`word.dat` / `tsi.dat` /
 `symbols.dat`), so they must be present before building the wasm:
 
 ```sh
-cargo xtask download   # unpacks them into build/installer/Dictionary/
+cargo xtask download-components   # unpacks them into build/installer/Dictionary/
 ```
 
 `build.rs` stages those into `OUT_DIR`; if they're missing the wasm build fails
@@ -60,6 +60,12 @@ npm run build
 Output lands in `crates/web_demo/dist/`. Static; upload anywhere. The
 generated `index.html` references the wasm bundle with relative URLs so
 it survives subpath hosting.
+
+## GitHub Pages
+
+The repository deploys this demo through `.github/workflows/pages.yml`.
+Enable Pages with **Build and deployment -> Source -> GitHub Actions** in the
+repository settings, then push to `main` or run the workflow manually.
 
 ## Scope
 

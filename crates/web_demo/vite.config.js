@@ -4,6 +4,9 @@ import { defineConfig } from "vite";
 // directly so we don't fight bundler-side asset rewriting.
 export default defineConfig({
   root: "static",
+  // GitHub Pages serves project sites from /<repo>/; relative asset URLs keep
+  // the generated bundle portable under that subpath and local previews.
+  base: "./",
   server: {
     // Bind every interface so Tailscale peers can reach the dev server.
     // `host: true` is shorthand for 0.0.0.0 + ::.
