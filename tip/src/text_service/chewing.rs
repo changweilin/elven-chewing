@@ -1497,6 +1497,21 @@ impl ChewingTextService {
         }
     }
 
+    fn set_lang_mode(&mut self, mode: LanguageMode) -> Result<()> {
+        let disabled = self.lang_mode.get().is_disabled();
+        let next = match (mode, disabled) {
+            (LanguageMode::Chinese, false) => TsfLangMode::Chinese,
+            (LanguageMode::English, false) => TsfLangMode::English,
+            (LanguageMode::Chinese, true) => TsfLangMode::DisabledChinese,
+            (LanguageMode::English, true) => TsfLangMode::DisabledEnglish,
+        };
+        self.lang_mode.set(next);
+        self.sync_lang_mode(true)?;
+        self.chewing_editor
+            .set_editor_options(|opt| opt.language_mode = self.lang_mode.get().into());
+        Ok(())
+    }
+
     /// Handle the reconvert-last-commit keybinding (default: Ctrl+`).
     /// Swap the most recently committed string between its English raw
     /// keystrokes and the bopomofo composition those same keystrokes would
@@ -1552,6 +1567,7 @@ impl ChewingTextService {
             committed_text: replacement,
             mode: new_mode,
         });
+        self.set_lang_mode(new_mode)?;
         Ok(())
     }
 
@@ -1578,6 +1594,7 @@ impl ChewingTextService {
             mode: LanguageMode::English,
         });
         self.update_preedit(context, replacement)?;
+        self.set_lang_mode(LanguageMode::English)?;
         Ok(true)
     }
 

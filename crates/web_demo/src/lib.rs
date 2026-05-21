@@ -220,6 +220,15 @@ impl From<LangMode> for LanguageMode {
     }
 }
 
+impl From<LanguageMode> for LangMode {
+    fn from(m: LanguageMode) -> Self {
+        match m {
+            LanguageMode::Chinese => LangMode::Chinese,
+            LanguageMode::English => LangMode::English,
+        }
+    }
+}
+
 #[wasm_bindgen]
 impl ChewingDemo {
     #[wasm_bindgen(constructor)]
@@ -544,6 +553,7 @@ impl ChewingDemo {
             committed_text: replacement.clone(),
             mode: new_mode,
         });
+        self.set_lang_mode(new_mode);
         self.editor.ack();
         Self::reconvert_result_json(delete_chars, &replacement)
     }
@@ -618,6 +628,7 @@ impl ChewingDemo {
             committed_text: replacement.clone(),
             mode: LanguageMode::English,
         });
+        self.set_lang_mode(LanguageMode::English);
         Some(Self::reconvert_result_json(0, &replacement))
     }
 
@@ -736,6 +747,12 @@ impl ChewingDemo {
 
     fn current_language_mode(&self) -> LanguageMode {
         self.lang_mode.into()
+    }
+
+    fn set_lang_mode(&mut self, mode: LanguageMode) {
+        self.lang_mode = mode.into();
+        self.editor
+            .set_editor_options(|opt| opt.language_mode = mode);
     }
 
     fn map_sel_key(&self, mut evt: KeyboardEvent, byte: u8) -> KeyboardEvent {
@@ -858,10 +875,12 @@ mod tests {
         let replacement = result["replacement"].as_str().unwrap();
         assert!(!replacement.is_empty());
         assert_ne!("hk4", replacement);
+        assert_eq!("chi", demo.lang_mode_str());
 
         let raw = demo.reconvert_last_commit();
         let result: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!("hk4", result["replacement"].as_str().unwrap());
+        assert_eq!("eng", demo.lang_mode_str());
     }
 
     #[test]
@@ -881,6 +900,7 @@ mod tests {
         let raw = demo.reconvert_last_commit();
         let result: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!("hk4", result["replacement"].as_str().unwrap());
+        assert_eq!("eng", demo.lang_mode_str());
     }
 
     #[test]
@@ -896,6 +916,7 @@ mod tests {
         assert_eq!(Some(0), result["delete_chars"].as_u64());
         assert_eq!("test", result["replacement"].as_str().unwrap());
         assert!(demo.display().is_empty());
+        assert_eq!("eng", demo.lang_mode_str());
     }
 
     #[test]
