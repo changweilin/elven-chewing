@@ -261,6 +261,9 @@ pub(super) struct ChewingTextService {
     pending_key_events: Vec<KeyboardEvent>,
     /// Most recent commit snapshot for the reconvert-last-commit keybinding.
     last_reconvert: Option<LastCommitSnapshot>,
+    /// Keep the current snapshot repeatable, but start the next typed segment
+    /// from a fresh reconvert snapshot.
+    reconvert_break_pending: bool,
 }
 
 impl ChewingTextService {
@@ -400,6 +403,7 @@ impl ChewingTextService {
             dual_preview,
             pending_key_events: Vec::new(),
             last_reconvert: None,
+            reconvert_break_pending: false,
         };
 
         if let Err(error) = cts.init_openclose(tid) {
@@ -615,6 +619,7 @@ impl ChewingTextService {
                 && shape_mode != CharacterForm::Fullwidth
                 && !evt.is_state_on(KeyState::Shift)
             {
+                self.snapshot_passthrough_literal(evt);
                 return Ok(false);
             }
             if !evt.ksym.is_unicode() {
@@ -948,6 +953,10 @@ impl ChewingTextService {
             && self.shift_key_state.release().is_some_and(|duration| {
                 duration < Duration::from_millis(self.cfg.chewing_tsf.shift_key_sensitivity as u64)
             });
+
+        if short_shift_press {
+            self.clear_reconvert_scope();
+        }
 
         if short_shift_press
             && self.dual_state.is_some()
@@ -1402,7 +1411,26 @@ impl ChewingTextService {
     /// `pending_key_events` so we can replay it later.
     fn track_key_event(&mut self, evt: KeyboardEvent) {
         if Self::event_text_char(evt).is_some() {
+            self.start_new_reconvert_segment_if_needed();
             self.pending_key_events.push(evt);
+        }
+    }
+
+    fn clear_reconvert_scope(&mut self) {
+        self.pending_key_events.clear();
+        self.last_reconvert = None;
+        self.reconvert_break_pending = false;
+    }
+
+    fn mark_reconvert_break_after_current(&mut self) {
+        self.pending_key_events.clear();
+        self.reconvert_break_pending = true;
+    }
+
+    fn start_new_reconvert_segment_if_needed(&mut self) {
+        if self.reconvert_break_pending {
+            self.last_reconvert = None;
+            self.reconvert_break_pending = false;
         }
     }
 
@@ -1418,12 +1446,15 @@ impl ChewingTextService {
     ) {
         if had_text_action {
             self.pending_key_events.clear();
+            self.last_reconvert = None;
+            self.reconvert_break_pending = false;
             return;
         }
         let key_events = mem::take(&mut self.pending_key_events);
         if committed_text.is_empty() || key_events.is_empty() {
             return;
         }
+        self.reconvert_break_pending = false;
         self.last_reconvert = Some(LastCommitSnapshot {
             key_events,
             committed_text: committed_text.to_owned(),
@@ -1438,6 +1469,7 @@ impl ChewingTextService {
         let Some(c) = Self::event_text_char(evt) else {
             return;
         };
+        self.start_new_reconvert_segment_if_needed();
         match self.last_reconvert.as_mut() {
             Some(last) if last.mode == LanguageMode::English => {
                 last.key_events.push(evt);
@@ -1453,7 +1485,22 @@ impl ChewingTextService {
         }
     }
 
+    fn snapshot_passthrough_literal(&mut self, evt: KeyboardEvent) {
+        let Some(c) = Self::event_text_char(evt) else {
+            return;
+        };
+        self.start_new_reconvert_segment_if_needed();
+        if let Some(last) = self.last_reconvert.as_mut() {
+            last.key_events.push(evt);
+            last.committed_text.push(c);
+        }
+    }
+
     fn pop_passthrough_english(&mut self) {
+        if self.reconvert_break_pending {
+            self.clear_reconvert_scope();
+            return;
+        }
         if let Some(last) = self.last_reconvert.as_mut()
             && last.mode == LanguageMode::English
         {
@@ -1506,7 +1553,8 @@ impl ChewingTextService {
             (LanguageMode::English, true) => TsfLangMode::DisabledEnglish,
         };
         self.lang_mode.set(next);
-        self.sync_lang_mode(true)?;
+        self.pending_lang_mode_change.set(true);
+        self.update_lang_buttons()?;
         self.chewing_editor
             .set_editor_options(|opt| opt.language_mode = self.lang_mode.get().into());
         Ok(())
@@ -1567,6 +1615,7 @@ impl ChewingTextService {
             committed_text: replacement,
             mode: new_mode,
         });
+        self.mark_reconvert_break_after_current();
         self.set_lang_mode(new_mode)?;
         Ok(())
     }
@@ -1594,6 +1643,7 @@ impl ChewingTextService {
             mode: LanguageMode::English,
         });
         self.update_preedit(context, replacement)?;
+        self.mark_reconvert_break_after_current();
         self.set_lang_mode(LanguageMode::English)?;
         Ok(true)
     }
@@ -1666,6 +1716,7 @@ impl ChewingTextService {
 
     /// 雙排模式: 切換 active 軌道 + 同步更新 inline composition 與浮動預覽
     fn dual_toggle_active(&mut self, context: &ITfContext) -> Result<()> {
+        self.clear_reconvert_scope();
         if self.dual_state.is_none() {
             return Ok(());
         }
@@ -1816,6 +1867,7 @@ impl ChewingTextService {
     }
 
     fn toggle_simp_chinese(&mut self) -> Result<()> {
+        self.clear_reconvert_scope();
         self.output_simp_chinese = !self.output_simp_chinese;
         debug!(
             "toggle output simplified chinese: {}",
@@ -1834,6 +1886,7 @@ impl ChewingTextService {
     }
 
     fn toggle_dual_input_mode(&mut self) -> Result<()> {
+        self.clear_reconvert_scope();
         let new_value = !self.cfg.chewing_tsf.dual_input_mode;
         debug!("toggle dual input mode: {}", new_value);
         self.cfg.chewing_tsf.dual_input_mode = new_value;
@@ -1859,6 +1912,7 @@ impl ChewingTextService {
     }
 
     fn toggle_partial_syllable_match(&mut self) -> Result<()> {
+        self.clear_reconvert_scope();
         self.partial_syllable_match = !self.partial_syllable_match;
         debug!(
             "toggle partial syllable match: {}",
@@ -1914,6 +1968,7 @@ impl ChewingTextService {
     }
 
     fn toggle_shape_mode(&mut self) -> Result<()> {
+        self.clear_reconvert_scope();
         self.chewing_editor.set_editor_options(|opt| {
             opt.character_form = match opt.character_form {
                 CharacterForm::Fullwidth => CharacterForm::Halfwidth,
@@ -1933,6 +1988,7 @@ impl ChewingTextService {
     }
 
     fn toggle_hsu_keyboard(&mut self, context: &ITfContext) -> Result<()> {
+        self.clear_reconvert_scope();
         if self.kbtype == KeyboardLayoutCompat::Hsu {
             self.kbtype = KeyboardLayoutCompat::Default;
             self.chewing_editor
@@ -1988,6 +2044,7 @@ impl ChewingTextService {
     }
 
     fn toggle_lang_mode(&mut self) -> Result<()> {
+        self.clear_reconvert_scope();
         let prev = self.lang_mode.get();
         self.lang_mode.update(|v| match v {
             TsfLangMode::English => TsfLangMode::Chinese,

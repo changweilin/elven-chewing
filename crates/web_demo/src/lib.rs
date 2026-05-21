@@ -196,6 +196,7 @@ pub struct ChewingDemo {
     output_simp_chinese: bool,
     pending_key_events: Vec<KeyboardEvent>,
     last_reconvert: Option<LastCommitSnapshot>,
+    reconvert_break_pending: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -261,6 +262,7 @@ impl ChewingDemo {
             output_simp_chinese,
             pending_key_events: Vec::new(),
             last_reconvert: None,
+            reconvert_break_pending: false,
         }
     }
 
@@ -287,13 +289,14 @@ impl ChewingDemo {
     #[wasm_bindgen(js_name = clear)]
     pub fn clear(&mut self) {
         self.editor.clear();
-        self.pending_key_events.clear();
+        self.clear_reconvert_scope();
     }
 
     /// Toggle 中/英 mode. Used by the lang-bar button on the web UI;
     /// equivalent to a short-shift press when `switch_lang_with_shift` is on.
     #[wasm_bindgen(js_name = toggleLangMode)]
     pub fn toggle_lang_mode(&mut self) {
+        self.clear_reconvert_scope();
         self.lang_mode = match self.lang_mode {
             LangMode::Chinese => LangMode::English,
             LangMode::English => LangMode::Chinese,
@@ -306,6 +309,7 @@ impl ChewingDemo {
     /// but reachable from the lang-bar button as well.
     #[wasm_bindgen(js_name = toggleShapeMode)]
     pub fn toggle_shape_mode(&mut self) {
+        self.clear_reconvert_scope();
         self.editor.set_editor_options(|opt| {
             opt.character_form = match opt.character_form {
                 CharacterForm::Fullwidth => CharacterForm::Halfwidth,
@@ -318,6 +322,7 @@ impl ChewingDemo {
     /// desktop IME.
     #[wasm_bindgen(js_name = toggleSimpChinese)]
     pub fn toggle_simp_chinese(&mut self) {
+        self.clear_reconvert_scope();
         self.output_simp_chinese = !self.output_simp_chinese;
         self.cfg.output_simp_chinese = self.output_simp_chinese;
     }
@@ -553,6 +558,7 @@ impl ChewingDemo {
             committed_text: replacement.clone(),
             mode: new_mode,
         });
+        self.mark_reconvert_break_after_current();
         self.set_lang_mode(new_mode);
         self.editor.ack();
         Self::reconvert_result_json(delete_chars, &replacement)
@@ -628,6 +634,7 @@ impl ChewingDemo {
             committed_text: replacement.clone(),
             mode: LanguageMode::English,
         });
+        self.mark_reconvert_break_after_current();
         self.set_lang_mode(LanguageMode::English);
         Some(Self::reconvert_result_json(0, &replacement))
     }
@@ -646,7 +653,26 @@ impl ChewingDemo {
 
     fn track_key_event(&mut self, evt: KeyboardEvent) {
         if Self::event_text_char(evt).is_some() {
+            self.start_new_reconvert_segment_if_needed();
             self.pending_key_events.push(evt);
+        }
+    }
+
+    fn clear_reconvert_scope(&mut self) {
+        self.pending_key_events.clear();
+        self.last_reconvert = None;
+        self.reconvert_break_pending = false;
+    }
+
+    fn mark_reconvert_break_after_current(&mut self) {
+        self.pending_key_events.clear();
+        self.reconvert_break_pending = true;
+    }
+
+    fn start_new_reconvert_segment_if_needed(&mut self) {
+        if self.reconvert_break_pending {
+            self.last_reconvert = None;
+            self.reconvert_break_pending = false;
         }
     }
 
@@ -662,6 +688,7 @@ impl ChewingDemo {
         if key_events.is_empty() {
             return;
         }
+        self.reconvert_break_pending = false;
         if mode == LanguageMode::English
             && let Some(last) = self.last_reconvert.as_mut()
             && last.mode == LanguageMode::English
@@ -904,6 +931,28 @@ mod tests {
     }
 
     #[test]
+    fn reconvert_english_to_chinese_keeps_following_input_chinese() {
+        let mut demo = ChewingDemo::new();
+        demo.toggle_lang_mode();
+        let mut doc = String::new();
+
+        for byte in b"hk4" {
+            demo.feed_ascii(*byte, 0);
+            drain_commit(&mut demo, &mut doc);
+        }
+        assert_eq!("hk4", doc);
+
+        let raw = demo.reconvert_last_commit();
+        let result: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(Some(3), result["delete_chars"].as_u64());
+        assert_eq!("chi", demo.lang_mode_str());
+
+        demo.feed_ascii(b'h', 0);
+        assert!(demo.display_commit().is_empty());
+        assert!(!demo.display().is_empty());
+    }
+
+    #[test]
     fn reconvert_active_chinese_composition_restores_raw_keys() {
         let mut demo = ChewingDemo::new();
 
@@ -917,6 +966,64 @@ mod tests {
         assert_eq!("test", result["replacement"].as_str().unwrap());
         assert!(demo.display().is_empty());
         assert_eq!("eng", demo.lang_mode_str());
+    }
+
+    #[test]
+    fn lang_toggle_breaks_reconvert_scope() {
+        let mut demo = ChewingDemo::new();
+        demo.toggle_lang_mode();
+        let mut doc = String::new();
+
+        for byte in b"hk4" {
+            demo.feed_ascii(*byte, 0);
+            drain_commit(&mut demo, &mut doc);
+        }
+        assert_eq!("hk4", doc);
+
+        demo.toggle_lang_mode();
+        assert!(demo.reconvert_last_commit().is_empty());
+    }
+
+    #[test]
+    fn reconvert_breaks_before_following_english_input() {
+        let mut demo = ChewingDemo::new();
+        let mut doc = String::new();
+
+        for byte in b"test" {
+            demo.feed_ascii(*byte, 0);
+        }
+        let raw = demo.reconvert_last_commit();
+        let result: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(Some(0), result["delete_chars"].as_u64());
+        doc.push_str(result["replacement"].as_str().unwrap());
+
+        for byte in b"hk4" {
+            demo.feed_ascii(*byte, 0);
+            drain_commit(&mut demo, &mut doc);
+        }
+        assert_eq!("testhk4", doc);
+
+        let raw = demo.reconvert_last_commit();
+        let result: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(Some(3), result["delete_chars"].as_u64());
+        assert!(!result["replacement"].as_str().unwrap().is_empty());
+    }
+
+    #[test]
+    fn plain_space_does_not_break_english_reconvert_scope() {
+        let mut demo = ChewingDemo::new();
+        demo.toggle_lang_mode();
+        let mut doc = String::new();
+
+        for byte in b"hk4 hk4" {
+            demo.feed_ascii(*byte, 0);
+            drain_commit(&mut demo, &mut doc);
+        }
+        assert_eq!("hk4 hk4", doc);
+
+        let raw = demo.reconvert_last_commit();
+        let result: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(Some(7), result["delete_chars"].as_u64());
     }
 
     #[test]
