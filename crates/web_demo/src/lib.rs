@@ -471,8 +471,11 @@ impl ChewingDemo {
         } else if !self.is_selecting() {
             self.track_key_event(evt);
         }
-        self.feed_event_with_mods(evt, modifiers);
+        let behavior = self.feed_event_with_mods(evt, modifiers);
         self.snapshot_commit_if_needed(self.current_language_mode());
+        if behavior != EditorKeyBehavior::Commit && Self::is_reconvert_break_special(name) {
+            self.clear_reconvert_scope();
+        }
         true
     }
 
@@ -674,6 +677,10 @@ impl ChewingDemo {
             self.last_reconvert = None;
             self.reconvert_break_pending = false;
         }
+    }
+
+    fn is_reconvert_break_special(name: &str) -> bool {
+        !matches!(name, "Backspace" | "Space" | " ")
     }
 
     fn snapshot_commit_if_needed(&mut self, mode: LanguageMode) {
@@ -969,6 +976,30 @@ mod tests {
     }
 
     #[test]
+    fn shift_breaks_before_active_chinese_reconvert() {
+        let mut demo = ChewingDemo::new();
+        demo.toggle_lang_mode();
+        let mut doc = String::new();
+
+        for byte in b"test" {
+            demo.feed_ascii(*byte, 0);
+            drain_commit(&mut demo, &mut doc);
+        }
+        assert_eq!("test", doc);
+
+        demo.toggle_lang_mode();
+        for byte in b"test" {
+            demo.feed_ascii(*byte, 0);
+        }
+
+        let raw = demo.reconvert_last_commit();
+        let result: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(Some(0), result["delete_chars"].as_u64());
+        doc.push_str(result["replacement"].as_str().unwrap());
+        assert_eq!("testtest", doc);
+    }
+
+    #[test]
     fn lang_toggle_breaks_reconvert_scope() {
         let mut demo = ChewingDemo::new();
         demo.toggle_lang_mode();
@@ -1024,6 +1055,22 @@ mod tests {
         let raw = demo.reconvert_last_commit();
         let result: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(Some(7), result["delete_chars"].as_u64());
+    }
+
+    #[test]
+    fn enter_breaks_english_reconvert_scope() {
+        let mut demo = ChewingDemo::new();
+        demo.toggle_lang_mode();
+        let mut doc = String::new();
+
+        for byte in b"test" {
+            demo.feed_ascii(*byte, 0);
+            drain_commit(&mut demo, &mut doc);
+        }
+        assert_eq!("test", doc);
+
+        assert!(demo.feed_special("Return", 0));
+        assert!(demo.reconvert_last_commit().is_empty());
     }
 
     #[test]

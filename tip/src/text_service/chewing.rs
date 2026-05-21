@@ -560,6 +560,7 @@ impl ChewingTextService {
         //
         if evt.is_state_on(KeyState::Alt) {
             // bypass IME. This might be a shortcut key used in the application
+            self.clear_reconvert_scope();
             debug!("key not handled - Alt modifier key was down");
             return Ok(false);
         }
@@ -574,6 +575,7 @@ impl ChewingTextService {
                 // need to handle easy symbol input
                 return Ok(true);
             } else {
+                self.clear_reconvert_scope();
                 debug!("key not handled - Ctrl modifier key was down");
                 return Ok(false);
             }
@@ -607,8 +609,7 @@ impl ChewingTextService {
                     debug!("key not handled - tracked passthrough English text");
                     return Ok(false);
                 } else {
-                    self.pending_key_events.clear();
-                    self.last_reconvert = None;
+                    self.clear_reconvert_scope();
                     debug!("key not handled - in English mode");
                     return Ok(false);
                 }
@@ -623,6 +624,7 @@ impl ChewingTextService {
                 return Ok(false);
             }
             if !evt.ksym.is_unicode() {
+                self.clear_reconvert_scope();
                 debug!("key not handled - key is not printable");
                 return Ok(false);
             }
@@ -798,6 +800,7 @@ impl ChewingTextService {
                         if let Err(error) = candidate_list.show() {
                             error!("{error:?}");
                         }
+                        self.clear_reconvert_scope();
                         return Ok(true);
                     }
                     FilterKeyResult::NotHandled => {
@@ -860,6 +863,9 @@ impl ChewingTextService {
         let last_behavior = self.chewing_editor.last_key_behavior();
 
         if last_behavior == EditorKeyBehavior::Ignore {
+            if evt.ksym != SYM_BACKSPACE {
+                self.clear_reconvert_scope();
+            }
             debug!("early return - chewing ignored key");
             return Ok(false);
         }

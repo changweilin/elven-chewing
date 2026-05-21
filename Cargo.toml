@@ -28,8 +28,8 @@ debug = true
 lto = "thin"
 panic = "abort"
 
-# Local patch: pending upstream PR for FuzzyPartialPrefix + Down arrow
-# (see ../libchewing-fix-cb branch fix/fuzzy-partial-prefix-select-with-down).
-# Remove this block once the fix is released on crates.io.
+# Local patch: pending upstream fix for FuzzyPartialPrefix + Down arrow.
+# CI materializes ../libchewing-fix-cb via .github/actions/prepare-libchewing.
+# Remove this block and the CI preparation action once the fix is released on crates.io.
 [patch.crates-io]
 chewing = { path = "../libchewing-fix-cb" }

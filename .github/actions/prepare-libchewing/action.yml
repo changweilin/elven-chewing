@@ -1,0 +1,29 @@
+name: Prepare patched libchewing
+description: Materialize the local libchewing patch dependency used by Cargo.
+
+runs:
+  using: composite
+  steps:
+    - name: Clone and patch libchewing
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        workspace="$GITHUB_WORKSPACE"
+        if command -v cygpath >/dev/null 2>&1; then
+          workspace="$(cygpath -u "$workspace")"
+        fi
+
+        workspace_parent="$(cd "$workspace/.." && pwd)"
+        dep_dir="$workspace_parent/libchewing-fix-cb"
+        upstream_rev="9363b03f7a4f0c2898213a911f2f71388aeaf571"
+        patch_file="$workspace/patches/libchewing-fuzzy-partial-prefix-down.patch"
+
+        case "$dep_dir" in
+          "$workspace_parent"/libchewing-fix-cb) ;;
+          *) echo "Refusing to remove unexpected path: $dep_dir" >&2; exit 1 ;;
+        esac
+        rm -rf "$dep_dir"
+        git clone --no-tags https://codeberg.org/chewing/libchewing.git "$dep_dir"
+        git -C "$dep_dir" checkout --detach "$upstream_rev"
+        git -C "$dep_dir" apply "$patch_file"

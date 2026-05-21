@@ -1,0 +1,32 @@
+diff --git a/src/editor/mod.rs b/src/editor/mod.rs
+index 3e23ef0..50d1d24 100644
+--- a/src/editor/mod.rs
++++ b/src/editor/mod.rs
+@@ -1283,6 +1283,27 @@ impl State for EnteringSyllable {
+                 }
+                 self.start_entering()
+             }
++            SYM_DOWN
++                if shared.options.lookup_strategy == LookupStrategy::FuzzyPartialPrefix =>
++            {
++                // Fuzzy partial-prefix mode: a still-incomplete syllable in
++                // `shared.syl` (e.g. initial only, no medial or tone) is a
++                // legitimate query. Flush it into the composition so Down
++                // can open the candidate window directly; without this arm
++                // the key falls through to `_` and spin_bell, because Down
++                // is not a bopomofo key.
++                if !shared.syl.is_empty() {
++                    let syl = shared.syl.read();
++                    if !shared
++                        .dict
++                        .lookup(&[syl], shared.options.lookup_strategy)
++                        .is_empty()
++                    {
++                        shared.com.insert(Symbol::from(syl));
++                    }
++                }
++                self.start_selecting(shared)
++            }
+             _ => {
+                 let key_behavior = match shared.options.lookup_strategy {
+                     LookupStrategy::FuzzyPartialPrefix => shared.syl.fuzzy_key_press(ev),
