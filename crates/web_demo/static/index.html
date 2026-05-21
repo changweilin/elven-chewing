@@ -676,9 +676,9 @@
       <div>
       <h1>精靈語輸入法 — 網頁沙盒</h1>
       <p class="subtitle">
-        純引擎預覽，跑在 WebAssembly 上；可用實體鍵盤直接輸入，下方虛擬鍵盤主要供觸控、展示與非打字者使用。
-        文字服務 (TSF)、候選字視窗、跨程序 IPC 不在此沙盒範圍，詳見
-        <code>design/ci-self-hosted-runner.md</code> 中的 Windows 整合說明。
+        這裡展示精靈語輸入法的自有輸入體驗：模糊注音猜詞、最近送出文字重轉、簡繁即時切換、
+        候選面板樣式與多種鍵盤配置。沙盒跑在 WebAssembly 上，可用實體鍵盤直接輸入；下方虛擬鍵盤主要供觸控與展示。
+        TSF 文字服務、跨程序 IPC 與 Windows 整合測試請見 <code>design/ci-self-hosted-runner.md</code>。
       </p>
       </div>
     </header>
@@ -756,7 +756,7 @@
               允許以聲母或前幾碼猜詞；即使引擎選了智慧選詞，勾選此項也會自動升級為模糊智慧選詞。
               <br>
               <strong>使用方式：</strong>打完不完整的注音 (例如僅輸入聲母「ㄘ」) 後，按 <kbd>↓</kbd> (Down arrow)
-              觸發候選字；空白鍵與其他鍵都不會啟動模糊查詢——這是 libchewing 引擎本身的設計，桌面版與沙盒一致。
+              觸發候選字；空白鍵與其他鍵都不會啟動模糊查詢，桌面版與沙盒刻意保持一致。
             </div>
 
             <div class="row">

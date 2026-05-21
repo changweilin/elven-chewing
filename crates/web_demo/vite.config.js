@@ -1,4 +1,36 @@
+import os from "node:os";
 import { defineConfig } from "vite";
+
+const machineName = os.hostname();
+const extraAllowedHosts = (process.env.VITE_ALLOWED_HOSTS ?? "")
+  .split(",")
+  .map((host) => host.trim())
+  .filter(Boolean);
+
+const allowedHosts = [
+  ...new Set([
+    "localhost",
+    ".localhost",
+    ".local",
+    ".lan",
+    ".home.arpa",
+    ".ts.net",
+    machineName,
+    machineName.toLowerCase(),
+    `${machineName}.local`,
+    `${machineName.toLowerCase()}.local`,
+    ...extraAllowedHosts,
+  ].filter(Boolean)),
+];
+
+const lanServer = {
+  // Bind every interface so LAN and Tailscale peers can reach the server.
+  // `host: true` is shorthand for 0.0.0.0 + ::.
+  host: true,
+  // Vite allows IP literals by default. These additions cover Windows host
+  // names, mDNS/router LAN names, Tailscale MagicDNS, and explicit overrides.
+  allowedHosts,
+};
 
 // Serve `static/` (with the hand-written index.html + wasm-pack output)
 // directly so we don't fight bundler-side asset rewriting.
@@ -8,15 +40,14 @@ export default defineConfig({
   // the generated bundle portable under that subpath and local previews.
   base: "./",
   server: {
-    // Bind every interface so Tailscale peers can reach the dev server.
-    // `host: true` is shorthand for 0.0.0.0 + ::.
-    host: true,
+    ...lanServer,
     port: 5173,
     strictPort: true,
-    // Vite blocks unknown Host headers by default to mitigate DNS rebinding.
-    // `.ts.net` matches Tailscale magic-DNS hostnames like
-    // `my-laptop.tailnet-XXXX.ts.net`. Adjust if you use a custom tailnet.
-    allowedHosts: [".ts.net", "localhost"],
+  },
+  preview: {
+    ...lanServer,
+    port: 4173,
+    strictPort: true,
   },
   build: {
     target: "es2022",

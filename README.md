@@ -1,22 +1,23 @@
 # 精靈語輸入法 (ElvenIME / Windows Chewing TSF)
 
-精靈語輸入法是一套以 Rust 實作的 Windows 注音輸入法，使用 Text Services Framework (TSF) 串接 Windows 文字輸入流程，並以新酷音 libchewing 作為注音轉換核心。專案包含 TSF DLL、常駐 host 程序、IPC 共用核心、TSF 註冊工具、WiX/MSI 安裝包，以及可在瀏覽器中測試引擎行為的 Web Demo。
+精靈語輸入法是一套以 Rust 實作的 Windows 注音輸入法，使用 Text Services Framework (TSF) 串接 Windows 文字輸入流程。它繼承新酷音/libchewing 的注音轉換基礎，但本專案的重點在 Windows 使用體驗與自有功能：out-of-process UI、雙排輸入、模糊注音猜詞、最近一次送出文字重轉、WebAssembly 沙盒、WiX/MSI 打包，以及 AppContainer 相容性。
 
-本專案適合想在 Windows 上開發、測試或打包新酷音 TSF 輸入法的人使用。一般使用者可安裝 MSI；開發者則可透過 `cargo xtask` 完成建置、下載外部元件與封裝。
+本專案適合想在 Windows 上開發、測試或打包現代 TSF 注音輸入法的人使用。一般使用者可安裝 MSI；開發者則可透過 `cargo xtask` 完成建置、下載外部元件與封裝。
 
 ## 核心功能特性
 
-- Windows TSF 輸入法實作，支援 64-bit 與 32-bit 應用程式載入。
-- 使用 libchewing 提供注音組字、候選字、片語學習與使用者詞庫。
-- 支援繁體中文輸出，並可切換簡體中文輸出。
-- 支援中文/英文、全形/半形、Caps Lock 與短按 Shift 切換等輸入模式。
-- 支援多種鍵盤配置與模擬英文鍵位，包括 Dvorak、Colemak、Colemak-DH、Workman、QGMLWY 等。
-- 支援候選字視窗、通知視窗、暗色模式偵測、字型與色彩設定。
-- 支援自訂快捷鍵，例如 `Ctrl+F12` 切換簡體輸出、`Ctrl+Delete` 反學習候選詞、`Ctrl+\`` 重新轉換最近一次送出的文字。
-- 以 out-of-process host 顯示 UI，TSF DLL 與 host 之間透過 Windows named pipe + varlink IPC 溝通。
-- 支援 AppContainer/UWP 情境所需的 Registry ACL，讓 Edge、Store App、新版 Office 等沙箱程式能讀取設定。
+- 以 Rust 與 `windows-rs` 實作 TSF/COM text service，支援 64-bit 與 32-bit 應用程式載入。
+- out-of-process host 架構：候選字、通知、雙排預覽等 UI 由獨立程序繪製，TSF DLL 保持輕量。
+- 雙排輸入模式：同一串按鍵同時保留中文轉換與英文原文，可在送出前切換輸出軌。
+- 最近一次送出文字重轉：預設 `Ctrl+\`` 可在中文與原始英文按鍵結果之間重新轉換。
+- 模糊注音猜詞：支援以聲母或前幾碼觸發候選字，適合快速輸入與不完整注音。
+- 即時簡繁輸出切換、全形/半形切換、Caps Lock 語言鎖定、短按 Shift 切換等輸入狀態控制。
+- 自訂候選字視窗、通知視窗、暗色模式偵測、語言列圖示、字型與色彩設定。
+- 自訂快捷鍵，例如 `Ctrl+F12` 切換簡體輸出、`Ctrl+Delete` 反學習候選詞、`Ctrl+F11` 切換雙排輸入軌。
+- 針對 Windows 應用相容性處理：AppContainer Registry ACL、WPF `scan_code = 0` 補正、IMM32 fallback 與特定程式 quirk。
+- 使用 Windows named pipe + varlink IPC，並支援 host lazy spawn、crash recovery 與簽章驗證。
 - 內建更新檢查流程，依 stable/development channel 提示可用版本。
-- 提供 `chewing_engine_kit` 與 `crates/web_demo`，可在非 Windows 環境或瀏覽器中測試引擎行為。
+- 提供 `chewing_engine_kit` 與 `crates/web_demo`，可在非 Windows 環境或瀏覽器中驗證精靈語自有輸入體驗。
 
 ## 系統需求與安裝步驟
 
@@ -89,13 +90,15 @@ dist/windows-chewing-tsf-unsigned.msi
 
 ## 快速上手與使用範例
 
-安裝後，切換到「精靈語輸入法」即可在支援 TSF 的 Windows 應用程式中輸入注音。
+安裝後，切換到「精靈語輸入法」即可在支援 TSF 的 Windows 應用程式中輸入。除了基本注音輸入，建議先試以下幾個本專案自有功能：
 
 常用操作：
 
 - 短按 `Shift`：預設切換中文/英文模式。
 - 語言列圖示：切換中文/英文、全形/半形，或開啟設定/工具選單。
 - 數字鍵 `1` 到 `9`：選擇候選字。
+- 模糊注音猜詞：開啟後輸入不完整注音，再按 `↓` 觸發候選。
+- 雙排輸入模式：可在選單或設定中開啟，輸入時同時預覽中文與英文軌。
 - `Ctrl+F12`：切換簡體中文輸出。
 - `Ctrl+Delete`：在候選字選擇期間反學習片語。
 - `Ctrl+F11`：雙排輸入模式開啟時切換中文/英文輸出軌。
@@ -130,6 +133,8 @@ Vite 預設會開在：
 http://localhost:5173
 ```
 
+開發伺服器也會綁定 LAN / Tailscale 介面，可改用 `http://<LAN-IP>:5173`、`http://<Tailscale-IP>:5173` 或 Tailscale MagicDNS hostname。若使用自訂網域，請設定 `VITE_ALLOWED_HOSTS` 後再啟動。
+
 ## 專案架構說明
 
 ```text
@@ -141,7 +146,7 @@ http://localhost:5173
 ├── crates/
 │   ├── chewing_tip_core/      # 共用核心：config、Registry、ACL、IPC、shell helper
 │   ├── chewing_tip_host/      # out-of-process host：UI 視窗、IPC dispatch、更新檢查
-│   ├── chewing_engine_kit/    # 可攜式 libchewing adapter，供測試與 Web Demo 使用
+│   ├── chewing_engine_kit/    # 可攜式輸入引擎 adapter，供測試與 Web Demo 使用
 │   ├── tsfreg/                # TSF profile 註冊、啟用、停用與 host 停止工具
 │   └── web_demo/              # wasm-bindgen + Vite 的瀏覽器引擎測試沙盒
 ├── installer/                 # WiX/MSI 安裝程式定義、zh-TW 字串與版本檔
