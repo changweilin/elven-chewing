@@ -5,20 +5,24 @@ on:
     branches: ["main"]
     paths:
       - ".github/workflows/pages.yml"
+      - ".github/actions/prepare-libchewing/**"
       - "Cargo.lock"
       - "Cargo.toml"
       - "crates/chewing_engine_kit/**"
       - "crates/web_demo/**"
+      - "patches/**"
       - "release.pgp"
       - "xtask/**"
   pull_request:
     branches: ["main"]
     paths:
       - ".github/workflows/pages.yml"
+      - ".github/actions/prepare-libchewing/**"
       - "Cargo.lock"
       - "Cargo.toml"
       - "crates/chewing_engine_kit/**"
       - "crates/web_demo/**"
+      - "patches/**"
       - "release.pgp"
       - "xtask/**"
   workflow_dispatch:
@@ -41,11 +45,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Checkout patched libchewing path
-        run: |
-          # Cargo.toml patches `chewing` to this sibling path.
-          git clone https://codeberg.org/chewing/libchewing.git ../libchewing-fix-cb
-          git -C ../libchewing-fix-cb checkout 9363b03f7a4f0c2898213a911f2f71388aeaf571
+      - name: Prepare patched libchewing path
+        uses: ./.github/actions/prepare-libchewing
 
       - name: Setup Rust wasm target
         run: rustup target add wasm32-unknown-unknown
