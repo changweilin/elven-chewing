@@ -62,7 +62,16 @@ jobs:
         run: cargo install wasm-pack --version 0.15.0 --locked
 
       - name: Download libchewing dictionaries
-        run: cargo xtask download-components
+        run: |
+          mkdir -p build/installer/Dictionary
+          curl -L -o "$RUNNER_TEMP/libchewing-data.zip" \
+            https://codeberg.org/chewing/libchewing-data/releases/download/v2026.3.22/libchewing-data-2026.3.22-Generic.zip
+          curl -L -o "$RUNNER_TEMP/libchewing-data.zip.asc" \
+            https://codeberg.org/chewing/libchewing-data/releases/download/v2026.3.22/libchewing-data-2026.3.22-Generic.zip.asc
+          sqv --keyring release.pgp \
+            "$RUNNER_TEMP/libchewing-data.zip.asc" \
+            "$RUNNER_TEMP/libchewing-data.zip"
+          unzip -uoj "$RUNNER_TEMP/libchewing-data.zip" -d build/installer/Dictionary
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
