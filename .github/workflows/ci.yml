@@ -113,6 +113,9 @@ jobs:
   package:
     runs-on: windows-latest
     name: Package
+    permissions:
+      contents: read
+      actions: read
     outputs:
       unsigned-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
     needs: [build]
@@ -139,6 +142,9 @@ jobs:
         with:
           name: Installer Artifact
           path: build/installer
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
 
       - name: Build Package
         shell: cmd
