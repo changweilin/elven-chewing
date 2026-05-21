@@ -30,3 +30,21 @@ index 3e23ef0..50d1d24 100644
              _ => {
                  let key_behavior = match shared.options.lookup_strategy {
                      LookupStrategy::FuzzyPartialPrefix => shared.syl.fuzzy_key_press(ev),
+diff --git a/src/path.rs b/src/path.rs
+index 25fbd68..211cb1c 100644
+--- a/src/path.rs
++++ b/src/path.rs
+@@ -15,3 +15,7 @@ const DEFAULT_SYS_PATH: &str = "C:\\Program Files\\ChewingTextService\\Dictionary";
+ #[cfg(target_family = "unix")]
+ const DEFAULT_SYS_PATH: &str = "/usr/share/libchewing";
++// wasm targets have no filesystem and are expected to load dictionaries via
++// in-memory APIs; provide a stub so the crate still compiles.
++#[cfg(target_family = "wasm")]
++const DEFAULT_SYS_PATH: &str = "/";
+ const SYS_PATH: Option<&str> = option_env!("CHEWING_DATADIR");
+@@ -19,4 +23,4 @@ const SYS_PATH: Option<&str> = option_env!("CHEWING_DATADIR");
+ #[cfg(target_family = "windows")]
+ const SEARCH_PATH_SEP: char = ';';
+-#[cfg(target_family = "unix")]
++#[cfg(any(target_family = "unix", target_family = "wasm"))]
+ const SEARCH_PATH_SEP: char = ':';
