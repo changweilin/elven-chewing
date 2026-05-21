@@ -133,7 +133,7 @@ impl Default for DemoConfig {
             enable_auto_learn: true,
             enable_fullwidth_toggle_key: false,
             sort_candidates_by_frequency: false,
-            partial_syllable_match: false,
+            partial_syllable_match: true,
             cursor_cand_list: true,
 
             default_english: false,

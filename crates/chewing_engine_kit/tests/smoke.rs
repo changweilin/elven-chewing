@@ -57,13 +57,13 @@ fn qwerty_zhuyin_phrase_test() {
 }
 
 #[test]
-fn default_config_uses_chewing_engine() {
+fn default_config_uses_fuzzy_chewing_engine() {
     use chewing::editor::ConversionEngineKind;
     let tmp = TempDir::new().unwrap();
     let editor = make_editor_with(&EngineConfig::default(), &tmp.path().join("user.dat"));
     assert!(matches!(
         editor.editor_options().conversion_engine,
-        ConversionEngineKind::ChewingEngine
+        ConversionEngineKind::FuzzyChewingEngine
     ));
 }
 
@@ -77,6 +77,19 @@ fn partial_syllable_match_forces_fuzzy() {
     assert!(matches!(
         editor.editor_options().conversion_engine,
         ConversionEngineKind::FuzzyChewingEngine
+    ));
+}
+
+#[test]
+fn conv_engine_default_without_partial_match_uses_chewing_engine() {
+    use chewing::editor::ConversionEngineKind;
+    let mut cfg = EngineConfig::default();
+    cfg.partial_syllable_match = false;
+    let tmp = TempDir::new().unwrap();
+    let editor = make_editor_with(&cfg, &tmp.path().join("user.dat"));
+    assert!(matches!(
+        editor.editor_options().conversion_engine,
+        ConversionEngineKind::ChewingEngine
     ));
 }
 

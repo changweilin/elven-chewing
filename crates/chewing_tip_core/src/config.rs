@@ -90,11 +90,15 @@ pub struct ChewingTsfConfig {
     pub dual_input_initial_track: i32,
     #[serde(default = "default_dual_track_switch_with_keybind")]
     pub dual_track_switch_with_keybind: bool,
-    #[serde(default)]
+    #[serde(default = "default_partial_syllable_match")]
     pub partial_syllable_match: bool,
 }
 
 fn default_dual_track_switch_with_keybind() -> bool {
+    true
+}
+
+fn default_partial_syllable_match() -> bool {
     true
 }
 
@@ -169,7 +173,7 @@ impl Default for ChewingTsfConfig {
             dual_input_mode: false,
             dual_input_initial_track: 0,
             dual_track_switch_with_keybind: true,
-            partial_syllable_match: false,
+            partial_syllable_match: true,
         }
     }
 }

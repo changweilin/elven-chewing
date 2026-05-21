@@ -1077,8 +1077,7 @@
       }
       function persist() {
         try {
-          // 保存「表單目前的值」而非已套用的 currentCfg,這樣即使使用者
-          // 改了設定但還沒按「套用並重設」,重新整理後一樣會記得並自動套用。
+          // 保存「表單目前的值」以及語言列等執行期狀態,重新整理後可還原。
           localStorage.setItem(STORAGE_KEY, JSON.stringify({
             cfg: collectFormCfg(),
             runtime: {
@@ -1786,24 +1785,72 @@
         return e.code === "Backquote" || e.code === "Quote" || e.key === "`" || e.key === "'";
       }
 
-      // 表單任何欄位變動 (含 color picker、checkbox、select) 都立即保存,
-      // 不必按「套用並重設」。color/checkbox/select 的事件會冒泡到 form。
-      form.addEventListener("input", persist);
-      form.addEventListener("change", persist);
+      let applyTimer = 0;
 
-      // Settings: apply config on submit。Checkbox unchecked 不會出現在 FormData，需手動補。
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();
+      function runtimeState() {
+        return {
+          lang: demo.langMode(),
+          shape: demo.shapeMode(),
+          simp: demo.simpChinese(),
+        };
+      }
+
+      function restoreRuntimeState(state, previousCfg, nextCfg) {
+        if (nextCfg.default_english === previousCfg.default_english
+          && state.lang !== demo.langMode()) {
+          demo.toggleLangMode();
+        }
+        if (nextCfg.default_full_space === previousCfg.default_full_space
+          && state.shape !== demo.shapeMode()) {
+          demo.toggleShapeMode();
+        }
+        if (nextCfg.output_simp_chinese === previousCfg.output_simp_chinese
+          && state.simp !== demo.simpChinese()) {
+          demo.toggleSimpChinese();
+        }
+      }
+
+      function applyFormCfg({ resetCommit = false, preserveRuntime = true, quiet = false } = {}) {
+        if (!form.checkValidity()) {
+          persist();
+          return false;
+        }
+
         const cfg = collectFormCfg();
+        const previousCfg = currentCfg;
+        const runtime = preserveRuntime ? runtimeState() : null;
         try {
           demo.applyConfig(JSON.stringify(cfg));
           currentCfg = cfg;
-          commitLog.textContent = "";
+          if (runtime) restoreRuntimeState(runtime, previousCfg, cfg);
+          if (resetCommit) commitLog.textContent = "";
           persist();
           render();
+          return true;
         } catch (err) {
-          alert("套用設定失敗：" + err);
+          if (quiet) console.warn("Failed to apply settings", err);
+          else alert("Failed to apply settings: " + err);
+          return false;
         }
+      }
+
+      function scheduleApplyFormCfg() {
+        window.clearTimeout(applyTimer);
+        applyTimer = window.setTimeout(() => {
+          applyTimer = 0;
+          applyFormCfg({ quiet: true });
+        }, 80);
+      }
+
+      form.addEventListener("input", scheduleApplyFormCfg);
+      form.addEventListener("change", scheduleApplyFormCfg);
+
+      // Settings: Checkbox unchecked is absent from FormData, so collect by field.
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        window.clearTimeout(applyTimer);
+        applyTimer = 0;
+        applyFormCfg({ resetCommit: true, preserveRuntime: false });
       });
 
       function collectFormCfg() {
@@ -1812,7 +1859,10 @@
           const el = form.elements[key];
           if (!el) continue;
           if (el.type === "checkbox") cfg[key] = el.checked;
-          else if (el.type === "number") cfg[key] = Number(el.value);
+          else if (el.type === "number") {
+            if (el.value === "") continue;
+            cfg[key] = Number(el.value);
+          }
           else if (el.tagName === "SELECT") cfg[key] = Number(el.value);
           else if (el.type === "text" || el.tagName === "INPUT") cfg[key] = el.value;
         }
@@ -1898,6 +1948,9 @@
       // 「回預設值」
       document.getElementById("reset-defaults").addEventListener("click", () => {
         applyCfgToForm(DEFAULTS);
+        window.clearTimeout(applyTimer);
+        applyTimer = 0;
+        applyFormCfg({ resetCommit: true, preserveRuntime: false });
       });
 
       clearBtn.addEventListener("click", () => {

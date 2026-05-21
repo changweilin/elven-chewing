@@ -66,7 +66,7 @@ impl Default for EngineConfig {
             enable_auto_learn: true,
             enable_fullwidth_toggle_key: false,
             sort_candidates_by_frequency: false,
-            partial_syllable_match: false,
+            partial_syllable_match: true,
         }
     }
 }
