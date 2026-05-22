@@ -738,7 +738,7 @@
         .key { font-size: 0.78rem; }
         .kb-viewport {
           overflow: hidden;
-          touch-action: none;
+          touch-action: pan-y;
           min-height: 250px;
           margin-inline: -0.1rem;
         }
@@ -1528,6 +1528,7 @@
 
       const KEYBOARD_SCALE_MIN = 0.72;
       const KEYBOARD_SCALE_MAX = 1.8;
+      const KEYBOARD_EDGE_GUTTER = 18;
       const keyboardTransform = { x: 0, y: 0, scale: 1 };
       const keyboardPointers = new Map();
       let keyboardGesture = null;
@@ -1568,6 +1569,22 @@
         };
       }
 
+      function boundedKeyboardAxis(pos, viewSize, contentSize) {
+        if (contentSize <= viewSize) {
+          const centered = (viewSize - contentSize) / 2;
+          return clamp(
+            pos,
+            centered - KEYBOARD_EDGE_GUTTER,
+            centered + KEYBOARD_EDGE_GUTTER,
+          );
+        }
+        return clamp(
+          pos,
+          viewSize - contentSize - KEYBOARD_EDGE_GUTTER,
+          KEYBOARD_EDGE_GUTTER,
+        );
+      }
+
       function clampKeyboardTransform() {
         if (!isMobile) {
           keyboardTransform.x = 0;
@@ -1585,16 +1602,8 @@
         const viewHeight = Math.max(kbViewport.clientHeight, 1);
         const scaledWidth = size.width * keyboardTransform.scale;
         const scaledHeight = size.height * keyboardTransform.scale;
-        keyboardTransform.x = clamp(
-          keyboardTransform.x,
-          Math.min(16, viewWidth - scaledWidth - 16),
-          Math.max(16, viewWidth - 48),
-        );
-        keyboardTransform.y = clamp(
-          keyboardTransform.y,
-          Math.min(12, viewHeight - scaledHeight - 12),
-          Math.max(12, viewHeight - 72),
-        );
+        keyboardTransform.x = boundedKeyboardAxis(keyboardTransform.x, viewWidth, scaledWidth);
+        keyboardTransform.y = boundedKeyboardAxis(keyboardTransform.y, viewHeight, scaledHeight);
       }
 
       function syncKeyboardViewportHeight() {
@@ -1604,7 +1613,7 @@
           return;
         }
         const size = keyboardSize();
-        const bottom = Math.max(0, keyboardTransform.y) + size.height * keyboardTransform.scale + 12;
+        const bottom = Math.max(0, keyboardTransform.y) + size.height * keyboardTransform.scale + KEYBOARD_EDGE_GUTTER;
         kbViewport.style.minHeight = `${Math.max(250, Math.ceil(bottom))}px`;
       }
 
@@ -1643,6 +1652,12 @@
         syncModButtonsVisuals();
       }
 
+      function captureKeyboardPointers() {
+        for (const pointerId of keyboardPointers.keys()) {
+          try { kbViewport.setPointerCapture(pointerId); } catch {}
+        }
+      }
+
       function updateKeyboardGesture(e) {
         if (!keyboardGesture || keyboardPointers.size < 2) return;
         e.preventDefault();
@@ -1664,9 +1679,9 @@
       kbViewport.addEventListener("pointerdown", (e) => {
         if (!isMobile || e.pointerType !== "touch") return;
         keyboardPointers.set(e.pointerId, keyboardPoint(e));
-        try { kbViewport.setPointerCapture(e.pointerId); } catch {}
         if (keyboardPointers.size === 2) {
           e.preventDefault();
+          captureKeyboardPointers();
           beginKeyboardGesture();
         }
       });
