@@ -719,30 +719,36 @@
           margin-bottom: 0.55rem;
         }
         .tray-caption { font-size: 0.66rem; }
+        .tray-pills {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          align-items: stretch;
+        }
         .tray-pill {
           min-height: 2rem;
-          padding: 0.28rem 0.54rem;
-          font-size: 0.8rem;
-          flex: 1 1 calc(50% - 0.35rem);
+          padding: 0.28rem 0.36rem;
+          font-size: 0.78rem;
           justify-content: center;
+          width: 100%;
         }
         .toast {
-          flex: 1 1 100%;
+          grid-column: 1 / -1;
           margin-left: 0;
           text-align: center;
         }
         .settings-tabs {
-          flex-wrap: wrap;
-          overflow-x: visible;
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          overflow: visible;
           padding-bottom: 0.15rem;
         }
         .settings-tabs button {
-          flex: 1 1 calc(50% - 4px);
           justify-content: center;
           min-height: 2.1rem;
-          padding: 0.28rem 0.5rem;
-          font-size: 0.78rem;
+          padding: 0.28rem 0.22rem;
+          font-size: 0.72rem;
           white-space: normal;
+          width: 100%;
         }
         .settings .row {
           grid-template-columns: minmax(0, 1fr);
@@ -784,10 +790,15 @@
           min-width: 0;
           font-size: 0.72rem;
         }
+        .settings .actions {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
         .settings .actions .btn {
-          flex: 1 1 100%;
+          width: 100%;
           min-height: 2.35rem;
           font-size: 0.84rem;
+          line-height: 1.25;
         }
         .kb-toolbar {
           align-items: stretch;
@@ -806,6 +817,7 @@
         .kb-viewport {
           overflow: hidden;
           touch-action: pan-y;
+          height: clamp(250px, 58vh, 430px);
           min-height: 250px;
           margin-inline: -0.1rem;
         }
@@ -1336,6 +1348,7 @@
               simp: demo.simpChinese(),
               layout,
             },
+            keyboard: keyboardTransformSnapshot(),
           }));
         } catch {}
       }
@@ -1585,11 +1598,13 @@
       const mobileMQ = window.matchMedia("(max-width: 720px)");
       let isMobile = mobileMQ.matches;
       mobileMQ.addEventListener("change", (e) => {
+        const wasMobile = isMobile;
         isMobile = e.matches;
         // 重建鍵盤以套用 / 撤掉「上下分半」鍵；保留 modifier 狀態無意義。
         modState.held = 0;
         modState.latched = 0;
-        buildKeyboard(layout);
+        keyboardTransformInitialized = false;
+        buildKeyboard(layout, { preserveTransform: wasMobile && isMobile });
         render();
         applyKeyboardTransform();
       });
@@ -1597,7 +1612,11 @@
       const KEYBOARD_SCALE_MIN = 0.45;
       const KEYBOARD_SCALE_MAX = 1.8;
       const KEYBOARD_EDGE_GUTTER = 18;
+      // Short tap vs long press threshold; pinch zoom uses it for the second touch too.
+      const LONG_PRESS_MS = 300;
       const keyboardTransform = { x: 0, y: 0, scale: 1 };
+      let persistedKeyboardTransform = null;
+      let keyboardTransformInitialized = false;
       const keyboardPointers = new Map();
       let keyboardGesture = null;
       let keyboardClickSuppressUntil = 0;
@@ -1611,11 +1630,42 @@
         return Math.min(max, Math.max(min, value));
       }
 
+      function normalizeKeyboardTransform(value) {
+        if (!value || typeof value !== "object") return null;
+        const x = Number(value.x);
+        const y = Number(value.y);
+        const scale = Number(value.scale);
+        if (![x, y, scale].every(Number.isFinite)) return null;
+        return {
+          x: Math.round(x * 100) / 100,
+          y: Math.round(y * 100) / 100,
+          scale: Math.round(clamp(scale, KEYBOARD_SCALE_MIN, KEYBOARD_SCALE_MAX) * 1000) / 1000,
+        };
+      }
+
+      function keyboardTransformSnapshot() {
+        if (!isMobile) return persistedKeyboardTransform;
+        return normalizeKeyboardTransform(keyboardTransform);
+      }
+
+      function persistKeyboardTransform() {
+        if (!isMobile || !keyboardTransformInitialized) return;
+        persistedKeyboardTransform = keyboardTransformSnapshot();
+        persist();
+      }
+
       function keyboardPoint(e) {
         const rect = kbViewport.getBoundingClientRect();
         return {
           x: e.clientX - rect.left,
           y: e.clientY - rect.top,
+        };
+      }
+
+      function keyboardPointerState(e, previous) {
+        return {
+          ...keyboardPoint(e),
+          downAt: previous?.downAt ?? performance.now(),
         };
       }
 
@@ -1643,29 +1693,38 @@
         const size = keyboardSize();
         const viewWidth = Math.max(kbViewport.clientWidth, 1);
         const availableWidth = Math.max(1, viewWidth - KEYBOARD_EDGE_GUTTER * 2);
-        return clamp(availableWidth / size.width, KEYBOARD_SCALE_MIN, 1);
-      }
-
-      function resetKeyboardTransformForViewport() {
-        keyboardTransform.x = 0;
-        keyboardTransform.y = 0;
-        keyboardTransform.scale = keyboardFitScale();
-      }
-
-      function boundedKeyboardAxis(pos, viewSize, contentSize) {
-        if (contentSize <= viewSize) {
-          const centered = (viewSize - contentSize) / 2;
-          return clamp(
-            pos,
-            centered - KEYBOARD_EDGE_GUTTER,
-            centered + KEYBOARD_EDGE_GUTTER,
-          );
-        }
+        const scaleBounds = keyboardScaleBounds(size);
         return clamp(
-          pos,
-          viewSize - contentSize - KEYBOARD_EDGE_GUTTER,
-          KEYBOARD_EDGE_GUTTER,
+          Math.min(availableWidth / size.width, 1),
+          scaleBounds.min,
+          scaleBounds.max,
         );
+      }
+
+      function resetKeyboardTransformForViewport({ force = false, preferPersisted = true } = {}) {
+        if (!force && keyboardTransformInitialized) return;
+        const saved = preferPersisted ? persistedKeyboardTransform : null;
+        if (isMobile && saved) {
+          keyboardTransform.x = saved.x;
+          keyboardTransform.y = saved.y;
+          keyboardTransform.scale = saved.scale;
+        } else {
+          keyboardTransform.x = 0;
+          keyboardTransform.y = 0;
+          keyboardTransform.scale = keyboardFitScale();
+        }
+        keyboardTransformInitialized = true;
+      }
+
+      function keyboardScaleBounds(size = keyboardSize()) {
+        const viewHeight = Math.max(kbViewport.clientHeight, 1);
+        const availableHeight = Math.max(1, viewHeight - KEYBOARD_EDGE_GUTTER);
+        const maxByHeight = availableHeight / Math.max(size.height, 1);
+        const max = Math.max(0.1, Math.min(KEYBOARD_SCALE_MAX, maxByHeight));
+        return {
+          min: Math.min(KEYBOARD_SCALE_MIN, max),
+          max,
+        };
       }
 
       function clampKeyboardTransform() {
@@ -1675,29 +1734,19 @@
           keyboardTransform.scale = 1;
           return;
         }
+        const size = keyboardSize();
+        const scaleBounds = keyboardScaleBounds(size);
         keyboardTransform.scale = clamp(
           keyboardTransform.scale,
-          KEYBOARD_SCALE_MIN,
-          KEYBOARD_SCALE_MAX,
+          scaleBounds.min,
+          scaleBounds.max,
         );
-        const size = keyboardSize();
-        const viewWidth = Math.max(kbViewport.clientWidth, 1);
-        const viewHeight = Math.max(kbViewport.clientHeight, 1);
-        const scaledWidth = size.width * keyboardTransform.scale;
-        const scaledHeight = size.height * keyboardTransform.scale;
-        keyboardTransform.x = boundedKeyboardAxis(keyboardTransform.x, viewWidth, scaledWidth);
-        keyboardTransform.y = boundedKeyboardAxis(keyboardTransform.y, viewHeight, scaledHeight);
+        keyboardTransform.y = 0;
       }
 
       function syncKeyboardViewportHeight() {
         keyboardViewportFrame = 0;
-        if (!isMobile) {
-          kbViewport.style.minHeight = "";
-          return;
-        }
-        const size = keyboardSize();
-        const bottom = Math.max(0, keyboardTransform.y) + size.height * keyboardTransform.scale + KEYBOARD_EDGE_GUTTER;
-        kbViewport.style.minHeight = `${Math.max(250, Math.ceil(bottom))}px`;
+        kbViewport.style.minHeight = "";
       }
 
       function requestKeyboardViewportSync() {
@@ -1715,24 +1764,32 @@
         requestKeyboardViewportSync();
       }
 
+      function keyboardGesturePoints() {
+        return Array.from(keyboardPointers.values()).slice(0, 2);
+      }
+
+      function canBeginKeyboardGesture(points = keyboardGesturePoints()) {
+        if (!isMobile || points.length < 2) return false;
+        const downTimes = points.map(p => p.downAt ?? 0);
+        return Math.max(...downTimes) - Math.min(...downTimes) < LONG_PRESS_MS;
+      }
+
       function beginKeyboardGesture() {
-        if (!isMobile || keyboardPointers.size < 2) return;
-        const points = Array.from(keyboardPointers.values()).slice(0, 2);
+        const points = keyboardGesturePoints();
+        if (!canBeginKeyboardGesture(points)) return false;
         const center = midpoint(points[0], points[1]);
         const dist = Math.max(1, distance(points[0], points[1]));
         keyboardGesture = {
           center,
           dist,
           scale: keyboardTransform.scale,
-          focus: {
-            x: (center.x - keyboardTransform.x) / keyboardTransform.scale,
-            y: (center.y - keyboardTransform.y) / keyboardTransform.scale,
-          },
+          focusX: (center.x - keyboardTransform.x) / keyboardTransform.scale,
         };
         keyboardClickSuppressUntil = performance.now() + 650;
         modState.held = 0;
         kbRoot.querySelectorAll(".pressed").forEach(el => el.classList.remove("pressed"));
         syncModButtonsVisuals();
+        return true;
       }
 
       function captureKeyboardPointers() {
@@ -1744,25 +1801,26 @@
       function updateKeyboardGesture(e) {
         if (!keyboardGesture || keyboardPointers.size < 2) return;
         e.preventDefault();
-        const points = Array.from(keyboardPointers.values()).slice(0, 2);
+        const points = keyboardGesturePoints();
         const center = midpoint(points[0], points[1]);
         const dist = Math.max(1, distance(points[0], points[1]));
+        const scaleBounds = keyboardScaleBounds();
         const nextScale = clamp(
           keyboardGesture.scale * (dist / keyboardGesture.dist),
-          KEYBOARD_SCALE_MIN,
-          KEYBOARD_SCALE_MAX,
+          scaleBounds.min,
+          scaleBounds.max,
         );
         keyboardTransform.scale = nextScale;
-        keyboardTransform.x = center.x - keyboardGesture.focus.x * nextScale;
-        keyboardTransform.y = center.y - keyboardGesture.focus.y * nextScale;
+        keyboardTransform.x = center.x - keyboardGesture.focusX * nextScale;
+        keyboardTransform.y = 0;
         keyboardClickSuppressUntil = performance.now() + 650;
         applyKeyboardTransform();
       }
 
       kbViewport.addEventListener("pointerdown", (e) => {
         if (!isMobile || e.pointerType !== "touch") return;
-        keyboardPointers.set(e.pointerId, keyboardPoint(e));
-        if (keyboardPointers.size === 2) {
+        keyboardPointers.set(e.pointerId, keyboardPointerState(e));
+        if (keyboardPointers.size === 2 && canBeginKeyboardGesture()) {
           e.preventDefault();
           captureKeyboardPointers();
           beginKeyboardGesture();
@@ -1770,17 +1828,19 @@
       });
       kbViewport.addEventListener("pointermove", (e) => {
         if (!isMobile || e.pointerType !== "touch" || !keyboardPointers.has(e.pointerId)) return;
-        keyboardPointers.set(e.pointerId, keyboardPoint(e));
+        keyboardPointers.set(e.pointerId, keyboardPointerState(e, keyboardPointers.get(e.pointerId)));
         updateKeyboardGesture(e);
       });
       function endKeyboardPointer(e) {
         if (!keyboardPointers.has(e.pointerId)) return;
+        const hadGesture = !!keyboardGesture;
         keyboardPointers.delete(e.pointerId);
         if (keyboardGesture) {
           keyboardClickSuppressUntil = performance.now() + 650;
         }
         if (keyboardPointers.size < 2) {
           keyboardGesture = null;
+          if (hadGesture) persistKeyboardTransform();
         } else {
           beginKeyboardGesture();
         }
@@ -1789,7 +1849,9 @@
       kbViewport.addEventListener("pointercancel", endKeyboardPointer);
       kbViewport.addEventListener("lostpointercapture", endKeyboardPointer);
       window.addEventListener("resize", () => {
-        resetKeyboardTransformForViewport();
+        applyKeyboardTransform();
+      });
+      window.visualViewport?.addEventListener("resize", () => {
         applyKeyboardTransform();
       });
 
@@ -1928,7 +1990,9 @@
         }
       }
 
-      function buildKeyboard(layoutName) {
+      function buildKeyboard(layoutName, { preserveTransform = false } = {}) {
+        const previousTransform = { ...keyboardTransform };
+        const hadTransform = keyboardTransformInitialized;
         layout = layoutName;
         kbRoot.innerHTML = "";
 
@@ -1969,7 +2033,14 @@
         kbRoot.appendChild(side);
 
         rebuildModButtons();
-        resetKeyboardTransformForViewport();
+        if (preserveTransform && hadTransform && isMobile) {
+          keyboardTransform.x = previousTransform.x;
+          keyboardTransform.y = previousTransform.y;
+          keyboardTransform.scale = previousTransform.scale;
+          keyboardTransformInitialized = true;
+        } else {
+          resetKeyboardTransformForViewport({ force: true });
+        }
         applyKeyboardTransform();
       }
 
@@ -2122,8 +2193,6 @@
       }
 
       // 短按 vs 長按閾值
-      const LONG_PRESS_MS = 300;
-
       function attachKeyHandlers(btn, cell) {
         if (cell.inert) return;
 
@@ -2385,6 +2454,7 @@
             currentCfg = structuredClone(DEFAULTS);
           }
         }
+        persistedKeyboardTransform = normalizeKeyboardTransform(saved.keyboard);
         const rt = saved.runtime;
         if (rt) {
           // applyConfig 後 demo 的狀態來自 default_english / default_full_space /
@@ -2572,7 +2642,7 @@
         // 切換時清掉 modifier latch，避免錯位視覺
         modState.held = 0;
         modState.latched = 0;
-        buildKeyboard(btn.dataset.layout);
+        buildKeyboard(btn.dataset.layout, { preserveTransform: true });
         persistIfRuntimeChanged();
       });
 
