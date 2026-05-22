@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <title>精靈語輸入法 Web Sandbox</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
     <meta name="theme-color" content="#16382c" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#1f4d3f" media="(prefers-color-scheme: light)" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
@@ -65,6 +65,10 @@
           --shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
         }
       }
+      html {
+        -webkit-text-size-adjust: 100%;
+        touch-action: manipulation;
+      }
       body {
         font-family: "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
         max-width: 1180px;
@@ -77,6 +81,7 @@
           var(--bg-page);
         background-attachment: fixed;
         min-height: 100vh;
+        overscroll-behavior-x: none;
       }
       /* shared elven glyph styling — symbols inherit colour via currentColor */
       .glyph { width: 1.1em; height: 1.1em; display: inline-block; vertical-align: -0.18em; }
@@ -279,10 +284,7 @@
       .settings .tab-page { display: none; }
       .settings .tab-page.active { display: block; }
       .settings .row.note {
-        grid-template-columns: 1fr;
-        color: var(--muted);
-        font-size: 0.78rem;
-        margin: 0.1rem 0 0.4rem;
+        display: none;
       }
       .settings .row .hint {
         font-size: 0.72rem;
@@ -357,7 +359,56 @@
         margin-bottom: 0.4rem;
         font-size: 0.9rem;
       }
-      .settings label { color: var(--fg); }
+      .settings .row:has(input[type="checkbox"]) {
+        grid-template-columns: minmax(0, 4fr) minmax(2.5rem, 1fr);
+      }
+      .settings .row:has(input[type="checkbox"]) input[type="checkbox"] {
+        justify-self: end;
+      }
+      .settings label {
+        color: var(--fg);
+        min-width: 0;
+      }
+      .settings label[data-tip] {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        width: max-content;
+        max-width: 100%;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+        text-decoration: underline dotted color-mix(in srgb, var(--muted) 62%, transparent);
+        text-underline-offset: 0.22em;
+        cursor: help;
+      }
+      .settings label[data-tip]::before {
+        content: attr(data-tip);
+        position: absolute;
+        left: 0;
+        bottom: calc(100% + 8px);
+        z-index: 30;
+        width: min(20rem, calc(100vw - 2rem));
+        padding: 0.55rem 0.65rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface-solid);
+        color: var(--fg);
+        box-shadow: var(--shadow);
+        font-size: 0.78rem;
+        font-weight: 400;
+        line-height: 1.45;
+        white-space: normal;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(4px);
+        transition: opacity 0.14s, transform 0.14s;
+      }
+      .settings label[data-tip]:hover::before,
+      .settings label[data-tip]:focus-visible::before,
+      .settings label[data-tip].tip-open::before {
+        opacity: 1;
+        transform: translateY(0);
+      }
       .settings input, .settings select {
         width: 100%; padding: 0.32rem 0.5rem;
         border: 1px solid var(--border); border-radius: 7px;
@@ -429,6 +480,11 @@
         gap: calc(var(--kgap) * 3);
         flex-wrap: wrap;
         justify-content: center;
+        transform-origin: top left;
+      }
+      .kb-viewport {
+        overflow: visible;
+        position: relative;
       }
       .kb-main, .kb-nav, .kb-arrows {
         display: flex;
@@ -465,9 +521,7 @@
         user-select: none;
         -webkit-user-select: none;
         -webkit-touch-callout: none;
-        /* 不設 touch-action: none — 否則瀏覽器會把雙點當第二次 click，
-           造成「想雙點縮放卻打了兩個字」。預設 auto 讓瀏覽器偵測縮放手勢
-           並抑制對應的 click。 */
+        /* 單指點按走 click；手機雙指縮放 / 拖曳由外層 keyboard viewport 處理。 */
         text-align: center;
         display: flex; flex-direction: column;
         align-items: center; justify-content: center;
@@ -563,20 +617,141 @@
       .kb-func-gap { width: calc(var(--u) * 0.5); }
 
       @media (max-width: 720px) {
-        :root { --u: 38px; --kgap: 3px; }
-        body { margin: 0.75rem auto; padding: 0 0.6rem; }
-        .panel { padding: 0.6rem 0.7rem; }
-        .panel h2 { margin-bottom: 0.35rem; }
+        :root { --u: 36px; --kgap: 3px; }
+        body {
+          max-width: none;
+          margin: 0;
+          padding: calc(0.7rem + env(safe-area-inset-top)) 0.55rem calc(1.2rem + env(safe-area-inset-bottom));
+          overflow-x: hidden;
+        }
+        header {
+          align-items: flex-start;
+          gap: 0.65rem;
+          margin-bottom: 0.75rem;
+        }
+        .brand-mark {
+          width: 36px;
+          height: 36px;
+          border-radius: 9px;
+        }
+        h1 {
+          font-size: 1.12rem;
+          line-height: 1.25;
+        }
+        .subtitle {
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          font-size: 0.78rem;
+          line-height: 1.45;
+        }
+        .layout { gap: 0.7rem; }
+        .panel {
+          border-radius: 10px;
+          padding: 0.65rem;
+        }
+        .panel h2 {
+          margin-bottom: 0.45rem;
+          font-size: 0.76rem;
+          letter-spacing: 0.03em;
+        }
+        .preedit {
+          font-size: 1.35rem;
+          min-height: 1.8rem;
+        }
+        .commit-log {
+          max-height: 5rem;
+          font-size: 0.8rem;
+        }
+        .tray-flyout {
+          padding: 0.42rem 0.48rem;
+          margin-bottom: 0.55rem;
+        }
+        .tray-caption { font-size: 0.66rem; }
+        .tray-pill {
+          min-height: 2rem;
+          padding: 0.28rem 0.54rem;
+          font-size: 0.8rem;
+        }
+        .settings-tabs {
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          padding-bottom: 0.15rem;
+          scrollbar-width: none;
+        }
+        .settings-tabs::-webkit-scrollbar { display: none; }
+        .settings-tabs button {
+          flex: 0 0 auto;
+          min-height: 2.1rem;
+          padding: 0.28rem 0.5rem;
+          font-size: 0.78rem;
+        }
+        .settings .row {
+          grid-template-columns: minmax(6.8rem, 0.9fr) minmax(0, 1.1fr);
+          gap: 0.45rem;
+          margin-bottom: 0.5rem;
+          font-size: 0.84rem;
+        }
+        .settings .row:has(input[type="checkbox"]) {
+          grid-template-columns: minmax(0, 4fr) minmax(2.75rem, 1fr);
+        }
+        .settings label[data-tip]::before {
+          width: min(17rem, calc(100vw - 1.6rem));
+          font-size: 0.76rem;
+        }
+        .settings input,
+        .settings select {
+          min-height: 2.15rem;
+          padding: 0.32rem 0.45rem;
+          font-size: 0.82rem;
+        }
+        .settings input[type="checkbox"] {
+          width: 1.25rem;
+          height: 1.25rem;
+          transform: none;
+        }
+        .settings .color-cell {
+          gap: 0.3rem;
+        }
+        .settings .color-cell input[type="text"] {
+          min-width: 0;
+          font-size: 0.72rem;
+        }
+        .settings .actions .btn {
+          flex: 1 1 100%;
+          min-height: 2.35rem;
+          font-size: 0.84rem;
+        }
+        .kb-toolbar {
+          align-items: stretch;
+          gap: 0.45rem;
+        }
+        .kb-title { width: 100%; }
+        .kb-toolbar .seg { width: 100%; }
+        .kb-toolbar .seg button {
+          flex: 1 1 0;
+          min-height: 2.1rem;
+          padding: 4px 8px;
+          font-size: 0.8rem;
+        }
         .key { font-size: 0.78rem; }
+        .kb-viewport {
+          overflow: hidden;
+          touch-action: none;
+          min-height: 250px;
+          margin-inline: -0.1rem;
+        }
         /* 在窄螢幕讓 kb-wrap 改為直向堆疊，主鍵區在上、nav 在下。
-           整列仍是 ANSI 寬度，所以允許水平捲動以保留相對位置。 */
+           整列仍是 ANSI 寬度，由自訂雙指縮放 / 拖曳保留可操作性。 */
         .kb-wrap {
+          width: max-content;
           flex-direction: column;
           align-items: flex-start;
           gap: calc(var(--kgap) * 4);
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          padding-bottom: 6px;
+          overflow: visible;
+          padding: 0 0 6px;
+          will-change: transform;
         }
         .kb-main, .kb-side { flex: 0 0 auto; }
         /* hint 在窄螢幕容易佔掉一整行；隱藏避免把鍵盤推下去。 */
@@ -685,7 +860,12 @@
 
     <div class="layout">
       <section class="panel area-preedit">
-        <h2><svg class="glyph"><use href="#g-quill"></use></svg>輸入預覽</h2>
+        <h2>
+          <svg class="glyph"><use href="#g-quill"></use></svg>輸入預覽
+          <button type="button" class="panel-action" id="clear-buffer" title="清空輸入緩衝" aria-label="清空輸入緩衝">
+            <svg class="glyph"><use href="#g-clear"></use></svg>
+          </button>
+        </h2>
         <div class="tray-flyout" id="lang-bar">
           <div class="tray-caption">
             <svg class="glyph"><use href="#g-spark"></use></svg>
@@ -1030,8 +1210,6 @@
           </div>
 
           <div class="actions">
-            <button type="submit" class="btn primary">套用並重設</button>
-            <button type="button" class="btn" id="clear-buffer">清空輸入緩衝</button>
             <button type="button" class="btn" id="reset-new-chewing-defaults">重置為新酷音預設</button>
             <button type="button" class="btn" id="reset-ms-new-phonetic-defaults">重置為微軟新注音預設</button>
           </div>
@@ -1049,7 +1227,9 @@
             短按＝與實體鍵盤相同，僅在按壓期間生效；長按＝持續鎖定，再點一次即放開。
           </span>
         </div>
-        <div class="kb-wrap" id="virtual-keyboard"></div>
+        <div class="kb-viewport" id="keyboard-viewport">
+          <div class="kb-wrap" id="virtual-keyboard"></div>
+        </div>
       </section>
     </div>
 
@@ -1327,6 +1507,7 @@
       const cands = document.getElementById("candidates");
       const form = document.getElementById("settings-form");
       const clearBtn = document.getElementById("clear-buffer");
+      const kbViewport = document.getElementById("keyboard-viewport");
       const kbRoot = document.getElementById("virtual-keyboard");
       const layoutSeg = document.getElementById("layout-seg");
 
@@ -1342,7 +1523,174 @@
         modState.held = 0;
         modState.latched = 0;
         buildKeyboard(layout);
+        applyKeyboardTransform();
       });
+
+      const KEYBOARD_SCALE_MIN = 0.72;
+      const KEYBOARD_SCALE_MAX = 1.8;
+      const keyboardTransform = { x: 0, y: 0, scale: 1 };
+      const keyboardPointers = new Map();
+      let keyboardGesture = null;
+      let keyboardClickSuppressUntil = 0;
+      let keyboardViewportFrame = 0;
+
+      function shouldSuppressKeyboardClick() {
+        return performance.now() < keyboardClickSuppressUntil;
+      }
+
+      function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
+      }
+
+      function keyboardPoint(e) {
+        const rect = kbViewport.getBoundingClientRect();
+        return {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        };
+      }
+
+      function midpoint(a, b) {
+        return {
+          x: (a.x + b.x) / 2,
+          y: (a.y + b.y) / 2,
+        };
+      }
+
+      function distance(a, b) {
+        return Math.hypot(a.x - b.x, a.y - b.y);
+      }
+
+      function keyboardSize() {
+        return {
+          width: Math.max(kbRoot.scrollWidth, 1),
+          height: Math.max(kbRoot.scrollHeight, 1),
+        };
+      }
+
+      function clampKeyboardTransform() {
+        if (!isMobile) {
+          keyboardTransform.x = 0;
+          keyboardTransform.y = 0;
+          keyboardTransform.scale = 1;
+          return;
+        }
+        keyboardTransform.scale = clamp(
+          keyboardTransform.scale,
+          KEYBOARD_SCALE_MIN,
+          KEYBOARD_SCALE_MAX,
+        );
+        const size = keyboardSize();
+        const viewWidth = Math.max(kbViewport.clientWidth, 1);
+        const viewHeight = Math.max(kbViewport.clientHeight, 1);
+        const scaledWidth = size.width * keyboardTransform.scale;
+        const scaledHeight = size.height * keyboardTransform.scale;
+        keyboardTransform.x = clamp(
+          keyboardTransform.x,
+          Math.min(16, viewWidth - scaledWidth - 16),
+          Math.max(16, viewWidth - 48),
+        );
+        keyboardTransform.y = clamp(
+          keyboardTransform.y,
+          Math.min(12, viewHeight - scaledHeight - 12),
+          Math.max(12, viewHeight - 72),
+        );
+      }
+
+      function syncKeyboardViewportHeight() {
+        keyboardViewportFrame = 0;
+        if (!isMobile) {
+          kbViewport.style.minHeight = "";
+          return;
+        }
+        const size = keyboardSize();
+        const bottom = Math.max(0, keyboardTransform.y) + size.height * keyboardTransform.scale + 12;
+        kbViewport.style.minHeight = `${Math.max(250, Math.ceil(bottom))}px`;
+      }
+
+      function requestKeyboardViewportSync() {
+        if (keyboardViewportFrame) return;
+        keyboardViewportFrame = requestAnimationFrame(syncKeyboardViewportHeight);
+      }
+
+      function applyKeyboardTransform() {
+        clampKeyboardTransform();
+        if (isMobile) {
+          kbRoot.style.transform = `translate(${keyboardTransform.x}px, ${keyboardTransform.y}px) scale(${keyboardTransform.scale})`;
+        } else {
+          kbRoot.style.transform = "";
+        }
+        requestKeyboardViewportSync();
+      }
+
+      function beginKeyboardGesture() {
+        if (!isMobile || keyboardPointers.size < 2) return;
+        const points = Array.from(keyboardPointers.values()).slice(0, 2);
+        const center = midpoint(points[0], points[1]);
+        const dist = Math.max(1, distance(points[0], points[1]));
+        keyboardGesture = {
+          center,
+          dist,
+          scale: keyboardTransform.scale,
+          focus: {
+            x: (center.x - keyboardTransform.x) / keyboardTransform.scale,
+            y: (center.y - keyboardTransform.y) / keyboardTransform.scale,
+          },
+        };
+        keyboardClickSuppressUntil = performance.now() + 650;
+        modState.held = 0;
+        kbRoot.querySelectorAll(".pressed").forEach(el => el.classList.remove("pressed"));
+        syncModButtonsVisuals();
+      }
+
+      function updateKeyboardGesture(e) {
+        if (!keyboardGesture || keyboardPointers.size < 2) return;
+        e.preventDefault();
+        const points = Array.from(keyboardPointers.values()).slice(0, 2);
+        const center = midpoint(points[0], points[1]);
+        const dist = Math.max(1, distance(points[0], points[1]));
+        const nextScale = clamp(
+          keyboardGesture.scale * (dist / keyboardGesture.dist),
+          KEYBOARD_SCALE_MIN,
+          KEYBOARD_SCALE_MAX,
+        );
+        keyboardTransform.scale = nextScale;
+        keyboardTransform.x = center.x - keyboardGesture.focus.x * nextScale;
+        keyboardTransform.y = center.y - keyboardGesture.focus.y * nextScale;
+        keyboardClickSuppressUntil = performance.now() + 650;
+        applyKeyboardTransform();
+      }
+
+      kbViewport.addEventListener("pointerdown", (e) => {
+        if (!isMobile || e.pointerType !== "touch") return;
+        keyboardPointers.set(e.pointerId, keyboardPoint(e));
+        try { kbViewport.setPointerCapture(e.pointerId); } catch {}
+        if (keyboardPointers.size === 2) {
+          e.preventDefault();
+          beginKeyboardGesture();
+        }
+      });
+      kbViewport.addEventListener("pointermove", (e) => {
+        if (!isMobile || e.pointerType !== "touch" || !keyboardPointers.has(e.pointerId)) return;
+        keyboardPointers.set(e.pointerId, keyboardPoint(e));
+        updateKeyboardGesture(e);
+      });
+      function endKeyboardPointer(e) {
+        if (!keyboardPointers.has(e.pointerId)) return;
+        keyboardPointers.delete(e.pointerId);
+        if (keyboardGesture) {
+          keyboardClickSuppressUntil = performance.now() + 650;
+        }
+        if (keyboardPointers.size < 2) {
+          keyboardGesture = null;
+        } else {
+          beginKeyboardGesture();
+        }
+      }
+      kbViewport.addEventListener("pointerup", endKeyboardPointer);
+      kbViewport.addEventListener("pointercancel", endKeyboardPointer);
+      kbViewport.addEventListener("lostpointercapture", endKeyboardPointer);
+      window.addEventListener("resize", applyKeyboardTransform);
 
       function render() {
         preedit.textContent = demo.display();
@@ -1515,6 +1863,7 @@
         kbRoot.appendChild(side);
 
         rebuildModButtons();
+        applyKeyboardTransform();
       }
 
       function appendRow(parent, cells, extraCls) {
@@ -1603,8 +1952,7 @@
           z.textContent = zhuyin;
           b.appendChild(z);
         }
-        // 不呼叫 preventDefault：要保留瀏覽器原生雙點縮放偵測；
-        // 副作用 (text selection、callout) 已由 user-select: none / touch-callout 擋掉。
+        // 單指點按照常送鍵；雙指手勢由 keyboard viewport 攔截並抑制 click。
         b.addEventListener("pointerdown", () => {
           b.classList.add("pressed");
         });
@@ -1612,7 +1960,14 @@
         b.addEventListener("pointerup", release);
         b.addEventListener("pointercancel", release);
         b.addEventListener("pointerleave", release);
-        b.addEventListener("click", onActivate);
+        b.addEventListener("click", (e) => {
+          if (shouldSuppressKeyboardClick()) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+          onActivate();
+        });
         return b;
       }
 
@@ -1641,13 +1996,18 @@
           btn.appendChild(sub);
         }
         if (cell.inert) return btn;
-        // 純視覺回饋;不 preventDefault 以保留瀏覽器雙點縮放偵測。
+        // 單指點按照常送鍵；雙指手勢由 keyboard viewport 攔截並抑制 click。
         btn.addEventListener("pointerdown", () => btn.classList.add("pressed"));
         const release = () => btn.classList.remove("pressed");
         btn.addEventListener("pointerup", release);
         btn.addEventListener("pointercancel", release);
         btn.addEventListener("pointerleave", release);
-        btn.addEventListener("click", () => {
+        btn.addEventListener("click", (e) => {
+          if (shouldSuppressKeyboardClick()) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
           if (cell.sp) feedSpecial(cell.sp);
           else if (cell.kp) feedKeypad(cell.a);
         });
@@ -1676,6 +2036,10 @@
           const onUp = () => {
             const dt = performance.now() - downAt;
             modState.held &= ~bit;
+            if (shouldSuppressKeyboardClick()) {
+              syncModButtonsVisuals();
+              return;
+            }
             if (wasLatched) {
               // 對已 latched 的 modifier 再次點按 (不論長短) → 解除鎖定。
               modState.latched &= ~bit;
@@ -1704,7 +2068,7 @@
         }
 
         // 一般字元 / special：純視覺回饋；click 才實際送字 (見下方)。
-        // 不 preventDefault — 留給瀏覽器偵測雙點縮放手勢。
+        // 單指點按照常送鍵；雙指手勢由 keyboard viewport 攔截並抑制 click。
         btn.addEventListener("pointerdown", () => {
           btn.classList.add("pressed");
         });
@@ -1713,7 +2077,12 @@
         btn.addEventListener("pointercancel", release);
         btn.addEventListener("pointerleave", release);
 
-        btn.addEventListener("click", () => {
+        btn.addEventListener("click", (e) => {
+          if (shouldSuppressKeyboardClick()) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
           if (cell.sp) {
             feedSpecial(cell.sp);
           } else if (cell.a !== undefined) {
@@ -1857,7 +2226,7 @@
         e.preventDefault();
         window.clearTimeout(applyTimer);
         applyTimer = 0;
-        applyFormCfg({ resetCommit: true, preserveRuntime: false });
+        applyFormCfg();
       });
 
       function collectFormCfg() {
@@ -1928,6 +2297,100 @@
 
       applyCfgToForm(currentCfg);
 
+      const OPTION_TIPS = {
+        conv: "選擇轉換引擎。智慧選詞會依詞頻挑詞；模糊智慧選詞會再允許部分音節與聲母前綴匹配。",
+        partial: "允許以聲母或前幾碼猜詞。打完不完整注音後按 ↓ 觸發候選字；空白鍵與其他鍵不會啟動模糊查詢。",
+        autolearn: "讓引擎記住你的選詞習慣，之後排序會更貼近常用詞。",
+        addfwd: "Ctrl 加數字加片語時的方向。取消勾選即改為向後加詞。",
+        easyshift: "在中文模式下用 Shift 加符號輸出新酷音特殊符號。",
+        easyshiftctrl: "改用 Ctrl 加 Shift 加符號輸出特殊符號，避免和一般 Shift 符號衝突。",
+        fullsym: "在中文模式下用 Shift 加符號輸出全形符號。",
+        upper: "在中文模式下按 Shift 加字母時，暫時輸出英文大寫。",
+        fwtoggle: "允許用 Shift 加空白鍵切換全形與半形。",
+        esc: "按 Esc 時清掉目前輸入中的注音、組字與候選狀態。",
+        selkey: "選擇候選字前方要顯示與接受的選字鍵。",
+        cpp: "設定每一頁最多顯示幾個候選字。",
+        cpr: "設定候選字面板每列顯示幾個候選字。",
+        cursor: "控制候選字面板是否高亮目前游標位置。",
+        space: "按空白鍵時直接開啟候選字，並用空白鍵選字。",
+        advance: "選字後自動往下一個可選位置移動。",
+        rearward: "選詞方向改為向後選詞。",
+        sortfreq: "依詞頻重新排序候選字，讓常用詞更靠前。",
+        "def-eng": "啟動時預設進入英數模式。",
+        "def-full": "啟動時預設使用全形空白與全形符號狀態。",
+        simp: "即時將預覽、送出與候選字內容轉成簡體中文。",
+        "switch-shift": "短按 Shift 時切換中文與英數模式。",
+        "shift-sens": "短按 Shift 的判定時間，低於此毫秒數才視為模式切換。",
+        caps: "用 Caps Lock 控制中文與英數模式。",
+        "caps-chi": "Caps Lock 啟用時鎖在中文模式；取消勾選則只做英文大小寫鎖定。",
+        "sync-mode": "桌面版會在每個文件開關時記錄與還原中文或英數模式；網頁沙盒僅保存設定。",
+        kb: "選擇注音鍵位配置，包含標準、許氏、倚天、拼音與多種實體鍵盤配置。",
+        simul: "英數模式時把實體 Dvorak、Colemak 等鍵盤反向映射回 QWERTY；網頁沙盒僅保存此設定。",
+        fontsize: "候選字面板使用的文字大小。",
+        fontfamily: "候選字面板使用的字型名稱。",
+        fg: "候選字一般文字顏色，格式為 RRGGBBAA。",
+        bg: "候選字一般背景顏色，格式為 RRGGBBAA。",
+        hifg: "目前選取候選字的文字顏色。",
+        hibg: "目前選取候選字的背景顏色。",
+        numfg: "候選字前方選字鍵編號的顏色。",
+        border: "候選字面板邊框顏色。",
+        nfg: "模式變更通知的文字顏色。",
+        nbg: "模式變更通知的背景顏色。",
+        nborder: "模式變更通知的邊框顏色。",
+        "show-notify": "切換中文、英數、繁體或簡體時，在上方狀態列短暫提示。",
+      };
+
+      function setupOptionTips() {
+        for (const label of form.querySelectorAll("label[for]")) {
+          const tip = OPTION_TIPS[label.htmlFor];
+          if (!tip) continue;
+          label.dataset.tip = tip;
+          label.tabIndex = 0;
+          label.setAttribute("aria-label", `${label.textContent.trim()}：${tip}`);
+        }
+      }
+
+      function closeOptionTips(except = null) {
+        form.querySelectorAll("label[data-tip].tip-open").forEach(label => {
+          if (label !== except) label.classList.remove("tip-open");
+        });
+      }
+
+      let suppressTipLabelClickUntil = 0;
+      setupOptionTips();
+      document.addEventListener("pointerdown", (e) => {
+        if (!e.target.closest?.(".settings label[data-tip]")) closeOptionTips();
+      });
+      form.addEventListener("pointerup", (e) => {
+        const label = e.target.closest?.("label[data-tip]");
+        if (!label || (e.pointerType !== "touch" && e.pointerType !== "pen")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const opening = !label.classList.contains("tip-open");
+        closeOptionTips(label);
+        label.classList.toggle("tip-open", opening);
+        suppressTipLabelClickUntil = performance.now() + 500;
+      });
+      form.addEventListener("click", (e) => {
+        const label = e.target.closest?.("label[data-tip]");
+        if (!label || performance.now() >= suppressTipLabelClickUntil) return;
+        e.preventDefault();
+        e.stopPropagation();
+      }, true);
+      form.addEventListener("keydown", (e) => {
+        const label = e.target.closest?.("label[data-tip]");
+        if (!label) return;
+        if (e.key === "Escape") {
+          label.classList.remove("tip-open");
+          return;
+        }
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        const opening = !label.classList.contains("tip-open");
+        closeOptionTips(label);
+        label.classList.toggle("tip-open", opening);
+      });
+
       // 設定 tab 切換
       const tabs = document.getElementById("settings-tabs");
       tabs.addEventListener("click", (e) => {
@@ -1956,7 +2419,7 @@
         applyCfgToForm(defaults);
         window.clearTimeout(applyTimer);
         applyTimer = 0;
-        applyFormCfg({ resetCommit: true, preserveRuntime: false });
+        applyFormCfg({ preserveRuntime: false });
       }
 
       document.getElementById("reset-new-chewing-defaults").addEventListener("click", () => {
