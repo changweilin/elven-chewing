@@ -197,12 +197,21 @@ pub struct ChewingDemo {
     pending_key_events: Vec<KeyboardEvent>,
     last_reconvert: Option<LastCommitSnapshot>,
     reconvert_break_pending: bool,
+    active_preview: Option<ActivePreview>,
+    pending_preview_commit: Option<LastCommitSnapshot>,
 }
 
 #[derive(Debug, Clone)]
 struct LastCommitSnapshot {
     key_events: Vec<KeyboardEvent>,
     committed_text: String,
+    mode: LanguageMode,
+}
+
+#[derive(Debug, Clone)]
+struct ActivePreview {
+    key_events: Vec<KeyboardEvent>,
+    text: String,
     mode: LanguageMode,
 }
 
@@ -263,6 +272,8 @@ impl ChewingDemo {
             pending_key_events: Vec::new(),
             last_reconvert: None,
             reconvert_break_pending: false,
+            active_preview: None,
+            pending_preview_commit: None,
         }
     }
 
@@ -290,6 +301,8 @@ impl ChewingDemo {
     pub fn clear(&mut self) {
         self.editor.clear();
         self.clear_reconvert_scope();
+        self.active_preview = None;
+        self.pending_preview_commit = None;
     }
 
     /// Toggle 中/英 mode. Used by the lang-bar button on the web UI;
@@ -297,6 +310,7 @@ impl ChewingDemo {
     #[wasm_bindgen(js_name = toggleLangMode)]
     pub fn toggle_lang_mode(&mut self) {
         self.clear_reconvert_scope();
+        self.active_preview = None;
         self.lang_mode = match self.lang_mode {
             LangMode::Chinese => LangMode::English,
             LangMode::English => LangMode::Chinese,
@@ -310,6 +324,7 @@ impl ChewingDemo {
     #[wasm_bindgen(js_name = toggleShapeMode)]
     pub fn toggle_shape_mode(&mut self) {
         self.clear_reconvert_scope();
+        self.active_preview = None;
         self.editor.set_editor_options(|opt| {
             opt.character_form = match opt.character_form {
                 CharacterForm::Fullwidth => CharacterForm::Halfwidth,
@@ -323,6 +338,7 @@ impl ChewingDemo {
     #[wasm_bindgen(js_name = toggleSimpChinese)]
     pub fn toggle_simp_chinese(&mut self) {
         self.clear_reconvert_scope();
+        self.active_preview = None;
         self.output_simp_chinese = !self.output_simp_chinese;
         self.cfg.output_simp_chinese = self.output_simp_chinese;
     }
@@ -355,6 +371,7 @@ impl ChewingDemo {
     /// OR of `KeyState` bit values (see JS `MOD` constants).
     #[wasm_bindgen(js_name = feedAscii)]
     pub fn feed_ascii(&mut self, byte: u8, modifiers: u32) {
+        self.active_preview = None;
         let shift_on = modifiers & SHIFT != 0;
         let caps_on = modifiers & CAPSLOCK_BIT != 0;
         let ctrl_on = modifiers & CONTROL != 0;
@@ -447,6 +464,7 @@ impl ChewingDemo {
     /// desktop IME. Bytes outside the keypad set are ignored.
     #[wasm_bindgen(js_name = feedKeypad)]
     pub fn feed_keypad(&mut self, byte: u8, modifiers: u32) {
+        self.active_preview = None;
         if let Some(evt) = keypad(byte) {
             self.feed_event_with_mods(evt, modifiers);
             self.snapshot_commit_if_needed(self.current_language_mode());
@@ -457,6 +475,9 @@ impl ChewingDemo {
     /// insert/delete, ...). `modifiers` is OR'd into the event state.
     #[wasm_bindgen(js_name = feedSpecial)]
     pub fn feed_special(&mut self, name: &str, modifiers: u32) -> bool {
+        if self.handle_active_preview_special(name) {
+            return true;
+        }
         // Ctrl+F12: toggle simplified Chinese output (matches the default
         // keybind list in ChewingTsfConfig::default()).
         if name == "F12" && (modifiers & CONTROL) != 0 {
@@ -486,6 +507,9 @@ impl ChewingDemo {
     /// display attributes the sandbox does not render).
     #[wasm_bindgen(js_name = display)]
     pub fn display(&self) -> String {
+        if let Some(preview) = &self.active_preview {
+            return preview.text.clone();
+        }
         let bopomofo = self.editor.syllable_buffer_display();
         let out = if bopomofo.is_empty() {
             self.editor.display()
@@ -516,12 +540,20 @@ impl ChewingDemo {
     /// is nothing pending. Calling this does NOT clear the buffer.
     #[wasm_bindgen(js_name = displayCommit)]
     pub fn display_commit(&self) -> String {
+        if let Some(commit) = &self.pending_preview_commit {
+            return commit.committed_text.clone();
+        }
         self.maybe_simp(self.editor.display_commit().to_string())
     }
 
     /// Clear the commit buffer after JS has appended it to the fake document.
     #[wasm_bindgen(js_name = ackCommit)]
     pub fn ack_commit(&mut self) {
+        if let Some(commit) = self.pending_preview_commit.take() {
+            self.last_reconvert = Some(commit);
+            self.reconvert_break_pending = false;
+            return;
+        }
         self.editor.ack();
     }
 
@@ -532,7 +564,10 @@ impl ChewingDemo {
     /// string when there is nothing safe to replace.
     #[wasm_bindgen(js_name = reconvertLastCommit)]
     pub fn reconvert_last_commit(&mut self) -> String {
-        if let Some(result) = self.reconvert_active_composition_to_english() {
+        if let Some(result) = self.toggle_active_preview() {
+            return result;
+        }
+        if let Some(result) = self.reconvert_active_composition_to_preview() {
             return result;
         }
 
@@ -565,6 +600,19 @@ impl ChewingDemo {
         self.set_lang_mode(new_mode);
         self.editor.ack();
         Self::reconvert_result_json(delete_chars, &replacement)
+    }
+
+    fn preview_result_json(preview: &ActivePreview) -> String {
+        serde_json::json!({
+            "preview": true,
+            "mode": match preview.mode {
+                LanguageMode::Chinese => "chi",
+                LanguageMode::English => "eng",
+            },
+            "replacement": preview.text.as_str(),
+            "delete_chars": 0,
+        })
+        .to_string()
     }
 
     fn reconvert_result_json(delete_chars: usize, replacement: &str) -> String {
@@ -615,7 +663,28 @@ impl ChewingDemo {
         self.editor.process_keyevent(evt)
     }
 
-    fn reconvert_active_composition_to_english(&mut self) -> Option<String> {
+    fn toggle_active_preview(&mut self) -> Option<String> {
+        let mut preview = self.active_preview.take()?;
+        let (mode, text) = match preview.mode {
+            LanguageMode::Chinese => (LanguageMode::English, Self::event_text(&preview.key_events)),
+            LanguageMode::English => (
+                LanguageMode::Chinese,
+                self.simulate_chinese_from_key_events(&preview.key_events)?,
+            ),
+        };
+        if text.is_empty() {
+            self.active_preview = Some(preview);
+            return None;
+        }
+        preview.mode = mode;
+        preview.text = text;
+        self.set_lang_mode(mode);
+        let result = Self::preview_result_json(&preview);
+        self.active_preview = Some(preview);
+        Some(result)
+    }
+
+    fn reconvert_active_composition_to_preview(&mut self) -> Option<String> {
         if self.current_language_mode() != LanguageMode::Chinese
             || self.pending_key_events.is_empty()
             || self.is_selecting()
@@ -632,14 +701,16 @@ impl ChewingDemo {
         }
 
         self.editor.clear();
-        self.last_reconvert = Some(LastCommitSnapshot {
+        let preview = ActivePreview {
             key_events,
-            committed_text: replacement.clone(),
             mode: LanguageMode::English,
-        });
-        self.mark_reconvert_break_after_current();
+            text: replacement,
+        };
         self.set_lang_mode(LanguageMode::English);
-        Some(Self::reconvert_result_json(0, &replacement))
+        let result = Self::preview_result_json(&preview);
+        self.active_preview = Some(preview);
+        self.pending_key_events.clear();
+        Some(result)
     }
 
     fn maybe_simp(&self, s: String) -> String {
@@ -652,6 +723,29 @@ impl ChewingDemo {
 
     fn is_selecting(&self) -> bool {
         self.editor.is_selecting()
+    }
+
+    fn handle_active_preview_special(&mut self, name: &str) -> bool {
+        let Some(preview) = self.active_preview.take() else {
+            return false;
+        };
+        match name {
+            "Return" | "Enter" => {
+                self.pending_preview_commit = Some(LastCommitSnapshot {
+                    key_events: preview.key_events,
+                    committed_text: preview.text,
+                    mode: preview.mode,
+                });
+            }
+            "Escape" | "Esc" => {
+                // Drop the preview.
+            }
+            _ => {
+                self.active_preview = Some(preview);
+                return false;
+            }
+        }
+        true
     }
 
     fn track_key_event(&mut self, evt: KeyboardEvent) {
@@ -970,9 +1064,39 @@ mod tests {
         let raw = demo.reconvert_last_commit();
         let result: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(Some(0), result["delete_chars"].as_u64());
+        assert_eq!(Some(true), result["preview"].as_bool());
         assert_eq!("test", result["replacement"].as_str().unwrap());
-        assert!(demo.display().is_empty());
+        assert_eq!("test", demo.display());
         assert_eq!("eng", demo.lang_mode_str());
+
+        let raw = demo.reconvert_last_commit();
+        let result: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(Some(true), result["preview"].as_bool());
+        assert_ne!("test", result["replacement"].as_str().unwrap());
+        assert_eq!("chi", demo.lang_mode_str());
+    }
+
+    #[test]
+    fn active_preview_commit_can_be_reconverted_after_ack() {
+        let mut demo = ChewingDemo::new();
+        let mut doc = String::new();
+
+        for byte in b"test" {
+            demo.feed_ascii(*byte, 0);
+        }
+        let raw = demo.reconvert_last_commit();
+        let result: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!("test", result["replacement"].as_str().unwrap());
+
+        assert!(demo.feed_special("Return", 0));
+        drain_commit(&mut demo, &mut doc);
+        assert_eq!("test", doc);
+        assert!(demo.display().is_empty());
+
+        let raw = demo.reconvert_last_commit();
+        let result: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(Some(4), result["delete_chars"].as_u64());
+        assert_ne!("test", result["replacement"].as_str().unwrap());
     }
 
     #[test]

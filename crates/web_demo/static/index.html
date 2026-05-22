@@ -1762,6 +1762,10 @@
           console.warn("reconvertLastCommit returned invalid JSON", err);
           return false;
         }
+        if (result.preview) {
+          render();
+          return true;
+        }
         const deleteChars = Number(result.delete_chars || 0);
         const replacement = String(result.replacement || "");
         if (deleteChars < 0 || !replacement) return false;

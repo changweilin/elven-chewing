@@ -692,7 +692,11 @@ impl ChewingTextService {
                     self.toggle_hsu_keyboard(context)?;
                 }
                 "reconvert_last_commit" => {
-                    self.on_reconvert_last_commit(context)?;
+                    if self.dual_preview_has_text() {
+                        self.dual_toggle_active(context)?;
+                    } else {
+                        self.on_reconvert_last_commit(context)?;
+                    }
                 }
                 "text" => {
                     if !self.chewing_editor.is_empty() {
@@ -1718,6 +1722,18 @@ impl ChewingTextService {
         if let Some(ds) = self.dual_state.as_mut() {
             ds.raw_english.pop();
         }
+    }
+
+    fn dual_preview_has_text(&self) -> bool {
+        self.dual_state.as_ref().is_some_and(|ds| {
+            !ds.raw_english.is_empty()
+                || !self.chewing_editor.syllable_buffer_display().is_empty()
+                || self
+                    .chewing_editor
+                    .intervals()
+                    .into_iter()
+                    .any(|it| !it.text.is_empty())
+        })
     }
 
     /// 雙排模式: 切換 active 軌道 + 同步更新 inline composition 與浮動預覽
