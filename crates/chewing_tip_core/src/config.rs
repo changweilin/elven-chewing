@@ -84,7 +84,7 @@ pub struct ChewingTsfConfig {
     pub update_info_url: String,
     pub last_update_check_time: u64,
     pub modified_timestamp: u64,
-    #[serde(default)]
+    #[serde(default = "default_dual_input_mode")]
     pub dual_input_mode: bool,
     #[serde(default)]
     pub dual_input_initial_track: i32,
@@ -98,12 +98,16 @@ fn default_dual_track_switch_with_keybind() -> bool {
     true
 }
 
+fn default_dual_input_mode() -> bool {
+    true
+}
+
 fn default_partial_syllable_match() -> bool {
     true
 }
 
-impl Default for ChewingTsfConfig {
-    fn default() -> Self {
+impl ChewingTsfConfig {
+    pub fn new_chewing_defaults() -> Self {
         Self {
             switch_lang_with_shift: true,
             shift_key_sensitivity: 200,
@@ -170,11 +174,28 @@ impl Default for ChewingTsfConfig {
             update_info_url: "".to_string(),
             last_update_check_time: 0,
             modified_timestamp: 0,
-            dual_input_mode: false,
+            dual_input_mode: true,
             dual_input_initial_track: 0,
             dual_track_switch_with_keybind: true,
             partial_syllable_match: true,
         }
+    }
+
+    pub fn microsoft_new_phonetic_defaults() -> Self {
+        let mut cfg = Self::new_chewing_defaults();
+        cfg.enable_fullwidth_toggle_key = true;
+        cfg.esc_clean_all_buf = true;
+        cfg.full_shape_symbols = false;
+        cfg.easy_symbols_with_shift = false;
+        cfg.easy_symbols_with_shift_ctrl = true;
+        cfg.show_cand_with_space_key = true;
+        cfg
+    }
+}
+
+impl Default for ChewingTsfConfig {
+    fn default() -> Self {
+        Self::new_chewing_defaults()
     }
 }
 
@@ -690,7 +711,30 @@ impl Display for ConfigError {
 
 #[cfg(test)]
 mod test {
-    use crate::config::KeybindValue;
+    use crate::config::{ChewingTsfConfig, KeybindValue};
+
+    #[test]
+    fn default_config_uses_new_chewing_preset_with_new_features_enabled() {
+        let cfg = ChewingTsfConfig::default();
+        assert_eq!(cfg, ChewingTsfConfig::new_chewing_defaults());
+        assert!(cfg.dual_input_mode);
+        assert!(cfg.dual_track_switch_with_keybind);
+        assert!(cfg.partial_syllable_match);
+    }
+
+    #[test]
+    fn microsoft_new_phonetic_preset_keeps_new_features_enabled() {
+        let cfg = ChewingTsfConfig::microsoft_new_phonetic_defaults();
+        assert!(cfg.dual_input_mode);
+        assert!(cfg.dual_track_switch_with_keybind);
+        assert!(cfg.partial_syllable_match);
+        assert!(cfg.enable_fullwidth_toggle_key);
+        assert!(cfg.esc_clean_all_buf);
+        assert!(!cfg.full_shape_symbols);
+        assert!(!cfg.easy_symbols_with_shift);
+        assert!(cfg.easy_symbols_with_shift_ctrl);
+        assert!(cfg.show_cand_with_space_key);
+    }
 
     #[test]
     fn parse_keybind_action() {

@@ -64,7 +64,7 @@ const SEL_KEYS: [&str; 6] = [
 /// has a meaningful effect inside the sandbox. Engine-only fields are
 /// forwarded to [`EngineConfig`]; the rest drive the state machine in
 /// [`ChewingDemo`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DemoConfig {
     // --- 引擎: 直接餵給 libchewing 的 EditorOptions ---
@@ -114,10 +114,11 @@ pub struct DemoConfig {
     pub notify_border_color: String,
 }
 
-impl Default for DemoConfig {
-    fn default() -> Self {
-        // Match ChewingTsfConfig::default() in crates/chewing_tip_core/src/config.rs
-        // so the web form starts with the same defaults the desktop IME does.
+impl DemoConfig {
+    fn new_chewing_defaults() -> Self {
+        // Match ChewingTsfConfig::new_chewing_defaults() in
+        // crates/chewing_tip_core/src/config.rs so the web form starts with
+        // the same defaults the desktop IME does where fields overlap.
         Self {
             keyboard_layout: 0,
             conv_engine: 1,
@@ -162,6 +163,23 @@ impl Default for DemoConfig {
             notify_bg_color: "FCFBDAFF".to_owned(),
             notify_border_color: "D6D9DBFF".to_owned(),
         }
+    }
+
+    fn microsoft_new_phonetic_defaults() -> Self {
+        let mut cfg = Self::new_chewing_defaults();
+        cfg.enable_fullwidth_toggle_key = true;
+        cfg.esc_clean_all_buf = true;
+        cfg.full_shape_symbols = false;
+        cfg.easy_symbols_with_shift = false;
+        cfg.easy_symbols_with_shift_ctrl = true;
+        cfg.show_cand_with_space_key = true;
+        cfg
+    }
+}
+
+impl Default for DemoConfig {
+    fn default() -> Self {
+        Self::new_chewing_defaults()
     }
 }
 
@@ -292,7 +310,21 @@ impl ChewingDemo {
     /// form without duplicating the schema.
     #[wasm_bindgen(js_name = defaultConfig)]
     pub fn default_config() -> String {
-        serde_json::to_string(&DemoConfig::default()).expect("default config should serialise")
+        Self::new_chewing_default_config()
+    }
+
+    /// JSON for the New Chewing-style default [`DemoConfig`].
+    #[wasm_bindgen(js_name = newChewingDefaultConfig)]
+    pub fn new_chewing_default_config() -> String {
+        serde_json::to_string(&DemoConfig::new_chewing_defaults())
+            .expect("new chewing default config should serialise")
+    }
+
+    /// JSON for the Microsoft New Phonetic-style default [`DemoConfig`].
+    #[wasm_bindgen(js_name = microsoftNewPhoneticDefaultConfig)]
+    pub fn microsoft_new_phonetic_default_config() -> String {
+        serde_json::to_string(&DemoConfig::microsoft_new_phonetic_defaults())
+            .expect("microsoft new phonetic default config should serialise")
     }
 
     /// Drop any in-flight composition / candidate state without touching the
@@ -975,7 +1007,7 @@ fn special_event(name: &str) -> Option<KeyboardEvent> {
 mod tests {
     use serde_json::Value;
 
-    use super::ChewingDemo;
+    use super::{ChewingDemo, DemoConfig};
 
     fn drain_commit(demo: &mut ChewingDemo, out: &mut String) {
         let committed = demo.display_commit();
@@ -983,6 +1015,26 @@ mod tests {
             out.push_str(&committed);
             demo.ack_commit();
         }
+    }
+
+    #[test]
+    fn default_config_uses_new_chewing_preset() {
+        let cfg: DemoConfig = serde_json::from_str(&ChewingDemo::default_config()).unwrap();
+        assert_eq!(cfg, DemoConfig::new_chewing_defaults());
+        assert!(cfg.partial_syllable_match);
+    }
+
+    #[test]
+    fn microsoft_new_phonetic_preset_keeps_new_features_enabled() {
+        let cfg: DemoConfig =
+            serde_json::from_str(&ChewingDemo::microsoft_new_phonetic_default_config()).unwrap();
+        assert!(cfg.partial_syllable_match);
+        assert!(cfg.enable_fullwidth_toggle_key);
+        assert!(cfg.esc_clean_all_buf);
+        assert!(!cfg.full_shape_symbols);
+        assert!(!cfg.easy_symbols_with_shift);
+        assert!(cfg.easy_symbols_with_shift_ctrl);
+        assert!(cfg.show_cand_with_space_key);
     }
 
     #[test]

@@ -1032,7 +1032,8 @@
           <div class="actions">
             <button type="submit" class="btn primary">套用並重設</button>
             <button type="button" class="btn" id="clear-buffer">清空輸入緩衝</button>
-            <button type="button" class="btn" id="reset-defaults">恢復預設值</button>
+            <button type="button" class="btn" id="reset-new-chewing-defaults">重置為新酷音預設</button>
+            <button type="button" class="btn" id="reset-ms-new-phonetic-defaults">重置為微軟新注音預設</button>
           </div>
         </form>
       </section>
@@ -1058,7 +1059,9 @@
       await init();
       const demo = new ChewingDemo();
       // 取得預設 config (從 wasm 側來,確保欄位完全同步)
-      const DEFAULTS = JSON.parse(ChewingDemo.defaultConfig());
+      const NEW_CHEWING_DEFAULTS = JSON.parse(ChewingDemo.newChewingDefaultConfig());
+      const MICROSOFT_NEW_PHONETIC_DEFAULTS = JSON.parse(ChewingDemo.microsoftNewPhoneticDefaultConfig());
+      const DEFAULTS = NEW_CHEWING_DEFAULTS;
       // 目前生效的 config (對應 form 內欄位)
       let currentCfg = structuredClone(DEFAULTS);
       // 用來測試 Shift 短按 (switch_lang_with_shift)
@@ -1949,12 +1952,19 @@
         });
       });
 
-      // 「回預設值」
-      document.getElementById("reset-defaults").addEventListener("click", () => {
-        applyCfgToForm(DEFAULTS);
+      function resetToDefaults(defaults) {
+        applyCfgToForm(defaults);
         window.clearTimeout(applyTimer);
         applyTimer = 0;
         applyFormCfg({ resetCommit: true, preserveRuntime: false });
+      }
+
+      document.getElementById("reset-new-chewing-defaults").addEventListener("click", () => {
+        resetToDefaults(NEW_CHEWING_DEFAULTS);
+      });
+
+      document.getElementById("reset-ms-new-phonetic-defaults").addEventListener("click", () => {
+        resetToDefaults(MICROSOFT_NEW_PHONETIC_DEFAULTS);
       });
 
       clearBtn.addEventListener("click", () => {
