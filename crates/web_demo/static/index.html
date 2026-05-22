@@ -69,6 +69,13 @@
         -webkit-text-size-adjust: 100%;
         touch-action: manipulation;
       }
+      *, *::before, *::after {
+        box-sizing: border-box;
+      }
+      html, body {
+        max-width: 100%;
+        overflow-x: hidden;
+      }
       body {
         font-family: "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
         max-width: 1180px;
@@ -91,6 +98,7 @@
         align-items: center;
         gap: 0.85rem;
       }
+      header > div { min-width: 0; }
       .brand-mark {
         width: 44px; height: 44px; flex: 0 0 auto;
         border-radius: 12px;
@@ -105,11 +113,12 @@
         background-clip: text;
         color: transparent;
       }
+      h1, .subtitle { overflow-wrap: anywhere; }
       .subtitle { color: var(--muted); font-size: 0.9rem; margin: 0; }
 
       .layout {
         display: grid;
-        grid-template-columns: 1.4fr 1fr;
+        grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
         grid-template-areas:
           "preedit    settings"
           "candidates settings"
@@ -124,7 +133,7 @@
       .panel.area-keyboard   { grid-area: keyboard; }
       @media (max-width: 880px) {
         .layout {
-          grid-template-columns: 1fr;
+          grid-template-columns: minmax(0, 1fr);
           /* 手機版：已提交文字緊貼候選字下方 — 注音 → 候選 → 已送出 由上而下
              形成完整輸入歷程，視線不用跨過鍵盤。鍵盤與設定降到底部。 */
           grid-template-areas:
@@ -143,6 +152,8 @@
         box-shadow: var(--shadow);
         backdrop-filter: blur(22px) saturate(1.35);
         -webkit-backdrop-filter: blur(22px) saturate(1.35);
+        min-width: 0;
+        max-width: 100%;
       }
       .panel h2 {
         display: flex;
@@ -190,15 +201,19 @@
         color: var(--fg);
         max-height: 8rem;
         overflow: auto;
+        overflow-wrap: anywhere;
       }
       .candidates {
         font-size: 1rem;
         min-height: 1.6rem;
+        min-width: 0;
       }
       .candidates .cand-grid {
         display: grid;
         grid-auto-rows: auto;
         gap: 4px;
+        min-width: 0;
+        max-width: 100%;
       }
       .candidates .cand {
         display: inline-flex;
@@ -206,11 +221,16 @@
         padding: 4px 10px;
         border: 1px solid transparent;
         border-radius: 4px;
+        min-width: 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        word-break: break-word;
       }
       .candidates .cand .idx {
         margin-right: 6px;
         font-size: 0.78rem;
         font-family: ui-monospace, monospace;
+        flex: 0 0 auto;
       }
 
       /* === Language bar — styled as the Windows 11 taskbar input flyout ===
@@ -232,7 +252,7 @@
         color: var(--muted); margin: 0 0.15rem 0.45rem;
       }
       .tray-caption .glyph { width: 0.95em; height: 0.95em; color: var(--accent); }
-      .tray-pills { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
+      .tray-pills { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; min-width: 0; }
       .tray-pill {
         display: inline-flex; align-items: center; gap: 0.4rem;
         padding: 0.34rem 0.72rem;
@@ -243,8 +263,10 @@
         font: inherit; font-size: 0.86rem;
         cursor: pointer; user-select: none;
         transition: background 0.15s, transform 0.05s, border-color 0.15s;
+        min-width: 0;
       }
       .tray-pill .glyph { width: 1.2em; height: 1.2em; }
+      .tray-pill-label { min-width: 0; overflow-wrap: anywhere; }
       .tray-pill:hover { border-color: var(--accent); }
       .tray-pill:active { transform: translateY(1px); }
       .tray-pill[data-on="0"] { background: var(--special-bg); color: var(--muted); }
@@ -256,6 +278,9 @@
         opacity: 0;
         transition: opacity 0.25s;
         box-shadow: var(--shadow);
+        min-width: 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
       }
       .toast.show { opacity: 1; }
 
@@ -263,6 +288,8 @@
       .settings-tabs {
         display: flex; flex-wrap: wrap;
         gap: 4px; margin-bottom: 0.75rem;
+        max-width: 100%;
+        min-width: 0;
       }
       .settings-tabs button {
         display: inline-flex; align-items: center; gap: 0.35rem;
@@ -272,6 +299,7 @@
         font: inherit; font-size: 0.82rem; cursor: pointer;
         color: var(--muted);
         transition: background 0.15s, color 0.15s, border-color 0.15s;
+        min-width: 0;
       }
       .settings-tabs button .glyph { width: 1.05em; height: 1.05em; }
       .settings-tabs button:hover { background: var(--accent-soft); color: var(--fg); }
@@ -329,6 +357,7 @@
         text-decoration: none;
         overflow-wrap: anywhere;
       }
+      .settings .about-link span { min-width: 0; }
       .settings .about-link:hover {
         border-color: var(--accent);
         color: var(--accent-strong);
@@ -345,15 +374,17 @@
       }
       .settings .color-cell {
         display: flex; gap: 0.4rem; align-items: center;
+        min-width: 0;
+        max-width: 100%;
       }
       .settings .color-cell input[type="text"] {
-        flex: 1; font-family: ui-monospace, monospace; font-size: 0.8rem;
+        flex: 1 1 0; min-width: 0; font-family: ui-monospace, monospace; font-size: 0.8rem;
       }
 
       /* Settings form */
       .settings .row {
         display: grid;
-        grid-template-columns: 11rem 1fr;
+        grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
         gap: 0.5rem;
         align-items: center;
         margin-bottom: 0.4rem;
@@ -368,6 +399,7 @@
       .settings label {
         color: var(--fg);
         min-width: 0;
+        overflow-wrap: anywhere;
       }
       .settings label[data-tip] {
         position: relative;
@@ -414,6 +446,8 @@
         border: 1px solid var(--border); border-radius: 7px;
         background: var(--surface-solid); color: var(--fg);
         font: inherit; font-size: 0.86rem;
+        min-width: 0;
+        max-width: 100%;
       }
       .settings input[type="checkbox"] {
         width: auto; accent-color: var(--accent); transform: scale(1.15);
@@ -424,6 +458,7 @@
       }
       .settings .actions {
         display: flex; gap: 0.5rem; margin-top: 0.8rem; flex-wrap: wrap;
+        min-width: 0;
       }
       .btn {
         padding: 0.46rem 0.95rem; border: 1px solid var(--border);
@@ -431,6 +466,9 @@
         cursor: pointer; font: inherit; font-size: 0.9rem;
         box-shadow: var(--shadow);
         transition: background 0.15s, border-color 0.15s, transform 0.05s;
+        min-width: 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
       }
       .btn:hover { border-color: var(--accent); }
       .btn:active { transform: translateY(1px); }
@@ -469,6 +507,8 @@
         font: inherit;
         font-size: 0.85rem;
         color: var(--fg);
+        min-width: 0;
+        overflow-wrap: anywhere;
       }
       .kb-toolbar .seg button.active {
         background: var(--accent);
@@ -485,6 +525,7 @@
       .kb-viewport {
         overflow: visible;
         position: relative;
+        max-width: 100%;
       }
       .kb-main, .kb-nav, .kb-arrows {
         display: flex;
@@ -508,9 +549,11 @@
       }
       .kb-numpad .key { width: auto; height: auto; }
       .kb-row { display: flex; gap: var(--kgap); }
+      .kb-row > span { flex: 0 0 auto; }
       .key {
         width: var(--u);
         height: var(--u);
+        flex: 0 0 auto;
         padding: 2px 4px;
         border: 1px solid var(--key-border);
         border-bottom-width: 2px;
@@ -521,6 +564,7 @@
         user-select: none;
         -webkit-user-select: none;
         -webkit-touch-callout: none;
+        overflow: hidden;
         /* 單指點按走 click；手機雙指縮放 / 拖曳由外層 keyboard viewport 處理。 */
         text-align: center;
         display: flex; flex-direction: column;
@@ -529,6 +573,11 @@
         font-size: 0.92rem;
         color: var(--key-fg);
         box-sizing: border-box;
+      }
+      .key > span {
+        min-width: 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
       }
       .key.label-sm { font-size: 0.75rem; }
       .key.label-xs { font-size: 0.66rem; }
@@ -568,6 +617,7 @@
       .key-stack {
         width: var(--u);
         height: var(--u);
+        flex: 0 0 auto;
         display: flex;
         flex-direction: column;
         border: 1px solid var(--key-border);
@@ -673,28 +723,40 @@
           min-height: 2rem;
           padding: 0.28rem 0.54rem;
           font-size: 0.8rem;
+          flex: 1 1 calc(50% - 0.35rem);
+          justify-content: center;
+        }
+        .toast {
+          flex: 1 1 100%;
+          margin-left: 0;
+          text-align: center;
         }
         .settings-tabs {
-          flex-wrap: nowrap;
-          overflow-x: auto;
+          flex-wrap: wrap;
+          overflow-x: visible;
           padding-bottom: 0.15rem;
-          scrollbar-width: none;
         }
-        .settings-tabs::-webkit-scrollbar { display: none; }
         .settings-tabs button {
-          flex: 0 0 auto;
+          flex: 1 1 calc(50% - 4px);
+          justify-content: center;
           min-height: 2.1rem;
           padding: 0.28rem 0.5rem;
           font-size: 0.78rem;
+          white-space: normal;
         }
         .settings .row {
-          grid-template-columns: minmax(6.8rem, 0.9fr) minmax(0, 1.1fr);
+          grid-template-columns: minmax(0, 1fr);
           gap: 0.45rem;
-          margin-bottom: 0.5rem;
+          align-items: stretch;
+          margin-bottom: 0.65rem;
           font-size: 0.84rem;
         }
         .settings .row:has(input[type="checkbox"]) {
-          grid-template-columns: minmax(0, 4fr) minmax(2.75rem, 1fr);
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: center;
+        }
+        .settings .row:has(input[type="checkbox"]) input[type="checkbox"] {
+          justify-self: end;
         }
         .settings label[data-tip]::before {
           width: min(17rem, calc(100vw - 1.6rem));
@@ -712,7 +774,11 @@
           transform: none;
         }
         .settings .color-cell {
+          width: 100%;
           gap: 0.3rem;
+        }
+        .settings .color-cell input[type="color"] {
+          flex: 0 0 2.6rem;
         }
         .settings .color-cell input[type="text"] {
           min-width: 0;
@@ -734,6 +800,7 @@
           min-height: 2.1rem;
           padding: 4px 8px;
           font-size: 0.8rem;
+          white-space: normal;
         }
         .key { font-size: 0.78rem; }
         .kb-viewport {
@@ -1523,10 +1590,11 @@
         modState.held = 0;
         modState.latched = 0;
         buildKeyboard(layout);
+        render();
         applyKeyboardTransform();
       });
 
-      const KEYBOARD_SCALE_MIN = 0.72;
+      const KEYBOARD_SCALE_MIN = 0.45;
       const KEYBOARD_SCALE_MAX = 1.8;
       const KEYBOARD_EDGE_GUTTER = 18;
       const keyboardTransform = { x: 0, y: 0, scale: 1 };
@@ -1563,10 +1631,25 @@
       }
 
       function keyboardSize() {
+        const measured = [kbRoot, ...kbRoot.querySelectorAll(".kb-row, .kb-main, .kb-side, .kb-numpad")];
         return {
-          width: Math.max(kbRoot.scrollWidth, 1),
+          width: Math.max(1, ...measured.map(el => el.scrollWidth || 0)),
           height: Math.max(kbRoot.scrollHeight, 1),
         };
+      }
+
+      function keyboardFitScale() {
+        if (!isMobile) return 1;
+        const size = keyboardSize();
+        const viewWidth = Math.max(kbViewport.clientWidth, 1);
+        const availableWidth = Math.max(1, viewWidth - KEYBOARD_EDGE_GUTTER * 2);
+        return clamp(availableWidth / size.width, KEYBOARD_SCALE_MIN, 1);
+      }
+
+      function resetKeyboardTransformForViewport() {
+        keyboardTransform.x = 0;
+        keyboardTransform.y = 0;
+        keyboardTransform.scale = keyboardFitScale();
       }
 
       function boundedKeyboardAxis(pos, viewSize, contentSize) {
@@ -1705,7 +1788,10 @@
       kbViewport.addEventListener("pointerup", endKeyboardPointer);
       kbViewport.addEventListener("pointercancel", endKeyboardPointer);
       kbViewport.addEventListener("lostpointercapture", endKeyboardPointer);
-      window.addEventListener("resize", applyKeyboardTransform);
+      window.addEventListener("resize", () => {
+        resetKeyboardTransformForViewport();
+        applyKeyboardTransform();
+      });
 
       function render() {
         preedit.textContent = demo.display();
@@ -1721,7 +1807,12 @@
           const grid = document.createElement("div");
           grid.className = "cand-grid";
           const perRow = Math.max(1, currentCfg.cand_per_row | 0);
-          grid.style.gridTemplateColumns = `repeat(${perRow}, max-content)`;
+          const columns = isMobile
+            ? Math.min(perRow, window.innerWidth < 380 ? 1 : 2)
+            : perRow;
+          grid.style.gridTemplateColumns = isMobile
+            ? `repeat(${columns}, minmax(0, 1fr))`
+            : `repeat(${columns}, max-content)`;
           list.forEach((cand, i) => {
             const span = document.createElement("span");
             span.className = "cand";
@@ -1878,6 +1969,7 @@
         kbRoot.appendChild(side);
 
         rebuildModButtons();
+        resetKeyboardTransformForViewport();
         applyKeyboardTransform();
       }
 
