@@ -233,16 +233,8 @@
         flex: 0 0 auto;
       }
 
-      /* === Language bar — styled as the Windows 11 taskbar input flyout ===
-         Mirrors the small acrylic flyout the system tray IME indicator opens,
-         so the sandbox previews how the language bar docks into Win10/11. */
+      /* === Language bar — styled as the Windows 11 taskbar input indicator === */
       .tray-flyout {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        background: var(--surface);
-        box-shadow: var(--shadow);
-        backdrop-filter: blur(22px) saturate(1.4);
-        -webkit-backdrop-filter: blur(22px) saturate(1.4);
         padding: 0.5rem 0.6rem;
         margin-bottom: 0.75rem;
       }
@@ -1692,10 +1684,9 @@
         if (!isMobile) return 1;
         const size = keyboardSize();
         const viewWidth = Math.max(kbViewport.clientWidth, 1);
-        const availableWidth = Math.max(1, viewWidth - KEYBOARD_EDGE_GUTTER * 2);
         const scaleBounds = keyboardScaleBounds(size);
         return clamp(
-          Math.min(availableWidth / size.width, 1),
+          Math.min(viewWidth / size.width, 1),
           scaleBounds.min,
           scaleBounds.max,
         );
@@ -1727,6 +1718,15 @@
         };
       }
 
+      function boundedKeyboardX(pos, size = keyboardSize(), scale = keyboardTransform.scale) {
+        const viewWidth = Math.max(kbViewport.clientWidth, 1);
+        const scaledWidth = Math.max(1, size.width * scale);
+        if (scaledWidth <= viewWidth) {
+          return (viewWidth - scaledWidth) / 2;
+        }
+        return clamp(pos, viewWidth - scaledWidth, 0);
+      }
+
       function clampKeyboardTransform() {
         if (!isMobile) {
           keyboardTransform.x = 0;
@@ -1741,6 +1741,7 @@
           scaleBounds.min,
           scaleBounds.max,
         );
+        keyboardTransform.x = boundedKeyboardX(keyboardTransform.x, size, keyboardTransform.scale);
         keyboardTransform.y = 0;
       }
 
