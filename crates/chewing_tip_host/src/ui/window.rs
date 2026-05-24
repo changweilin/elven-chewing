@@ -25,6 +25,34 @@ impl Window {
     }
 }
 
+pub(crate) fn register_ime_window_class(hinst: HINSTANCE, class_name: PCWSTR, wnd_proc: WNDPROC) {
+    let wc = WNDCLASSEXW {
+        cbSize: size_of::<WNDCLASSEXW>() as u32,
+        style: CS_IME,
+        lpfnWndProc: wnd_proc,
+        cbClsExtra: 0,
+        cbWndExtra: 0,
+        hInstance: hinst,
+        hCursor: unsafe { LoadCursorW(None, IDC_ARROW).unwrap_or_default() },
+        lpszMenuName: PCWSTR::null(),
+        lpszClassName: class_name,
+        ..Default::default()
+    };
+    unsafe { RegisterClassExW(&wc) };
+}
+
+pub(crate) fn create_ime_popup_window(class_name: PCWSTR, user_data: *const c_void) -> Window {
+    let window = Window::new();
+    window.create(
+        HWND_DESKTOP,
+        class_name,
+        WS_POPUP | WS_CLIPCHILDREN,
+        WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+        user_data,
+    );
+    window
+}
+
 pub(crate) extern "system" fn wnd_proc(
     hwnd: HWND,
     msg: u32,
@@ -124,6 +152,11 @@ impl Window {
                 let _ = UpdateWindow(self.hwnd());
             }
         }
+    }
+
+    pub(crate) fn show_and_refresh(&self) {
+        self.show();
+        self.refresh();
     }
 }
 

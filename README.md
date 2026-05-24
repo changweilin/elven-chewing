@@ -164,7 +164,7 @@ http://localhost:5173
 | --- | --- |
 | `chewing_tip.dll` | Windows TSF text service，負責接收按鍵、維護 composition、送出文字。 |
 | `chewing_tip_host.exe` | 顯示候選字、通知與雙排預覽等 UI，並處理更新檢查。 |
-| `tsfreg.exe` | 安裝/解除安裝時註冊 TSF CLSID、profile 與 categories。 |
+| `tsfreg.exe` | 安裝/解除安裝時註冊 TSF CLSID、profile 與 categories；`tsfreg -x` 可匯出診斷 JSON。 |
 | `ChewingPreferences.exe` | 外部下載的設定工具，由 MSI 一併安裝。 |
 | `ChewingEditor.exe` | 外部下載的使用者詞庫編輯工具，由 MSI 一併安裝。 |
 

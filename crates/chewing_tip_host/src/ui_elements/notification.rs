@@ -24,13 +24,11 @@ use windows::Win32::{
         Gdi::{BeginPaint, EndPaint, PAINTSTRUCT},
     },
     UI::WindowsAndMessaging::{
-        CS_IME, GWLP_USERDATA, GetWindowLongPtrW, HWND_DESKTOP, IDC_ARROW, KillTimer, LoadCursorW,
-        RegisterClassExW, SetTimer, WINDOWPOS, WM_PAINT, WM_TIMER, WM_WINDOWPOSCHANGING,
-        WNDCLASSEXW, WS_CLIPCHILDREN, WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
-        WS_POPUP,
+        GWLP_USERDATA, GetWindowLongPtrW, KillTimer, SetTimer, WINDOWPOS, WM_PAINT, WM_TIMER,
+        WM_WINDOWPOSCHANGING,
     },
 };
-use windows_core::{HSTRING, PCWSTR, w};
+use windows_core::{HSTRING, w};
 
 use crate::ui::{
     UiError,
@@ -39,7 +37,7 @@ use crate::ui::{
         d3d11_device, get_dpi_for_point, get_dpi_for_window, setup_direct_composition,
     },
     message_box::draw_message_box,
-    window::Window,
+    window::{Window, create_ime_popup_window, register_ime_window_class},
 };
 
 const ID_TIMEOUT: usize = 1;
@@ -129,14 +127,7 @@ impl RenderedView {
     fn new(user_data: *const Notification) -> Result<RenderedView, UiError> {
         let err = || UiError(format!("failed to create new RenderedView"));
 
-        let window = Window::new();
-        window.create(
-            HWND_DESKTOP,
-            w!("ChewingNotificationWindow"),
-            WS_POPUP | WS_CLIPCHILDREN,
-            WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-            user_data.cast(),
-        );
+        let window = create_ime_popup_window(w!("ChewingNotificationWindow"), user_data.cast());
         unsafe {
             let factory: ID2D1Factory1 =
                 D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None).or_raise(err)?;
@@ -301,19 +292,7 @@ impl RenderedView {
 
 impl Notification {
     pub(crate) fn window_register_class(hinst: HINSTANCE) {
-        let wc = WNDCLASSEXW {
-            cbSize: size_of::<WNDCLASSEXW>() as u32,
-            style: CS_IME,
-            lpfnWndProc: Some(wnd_proc),
-            cbClsExtra: 0,
-            cbWndExtra: 0,
-            hInstance: hinst,
-            hCursor: unsafe { LoadCursorW(None, IDC_ARROW).unwrap_or_default() },
-            lpszMenuName: PCWSTR::null(),
-            lpszClassName: w!("ChewingNotificationWindow"),
-            ..Default::default()
-        };
-        unsafe { RegisterClassExW(&wc) };
+        register_ime_window_class(hinst, w!("ChewingNotificationWindow"), Some(wnd_proc));
     }
     pub(crate) fn new() -> Result<Rc<Notification>, UiError> {
         let err = || UiError("failed to create notification window".to_string());
@@ -355,7 +334,6 @@ impl Notification {
     pub(crate) fn show(&self) {
         let view = self.view.borrow();
         let window = view.window();
-        window.show();
-        window.refresh();
+        window.show_and_refresh();
     }
 }

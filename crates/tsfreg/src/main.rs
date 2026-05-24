@@ -5,7 +5,10 @@
 
 use std::{env, process};
 
-use chewing_tip_core::ipc::{client::ChewingIpcClient, messages::Stop, varlink::MethodCall};
+use chewing_tip_core::{
+    diagnostics::collect_diagnostics,
+    ipc::{client::ChewingIpcClient, messages::Stop, varlink::MethodCall},
+};
 use serde_json::Value;
 use windows::{
     Win32::{
@@ -179,6 +182,21 @@ fn stop() {
 }
 
 fn main() -> Result<()> {
+    if env::args().any(|arg| arg == "-x" || arg == "--diagnostics") {
+        unsafe {
+            let _ = AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+        let report = collect_diagnostics();
+        match serde_json::to_string_pretty(&report) {
+            Ok(json) => println!("{json}"),
+            Err(error) => {
+                println!("Error: failed to serialize diagnostics: {error}");
+                process::exit(1);
+            }
+        }
+        return Ok(());
+    }
+
     unsafe {
         if IsDebuggerPresent().as_bool() {
             let _ = AttachConsole(ATTACH_PARENT_PROCESS);
@@ -192,6 +210,7 @@ fn main() -> Result<()> {
             println!("  tsfreg -d           立即停用輸入法");
             println!("  tsfreg -u                 取消註冊");
             println!("  tsfreg -s   停止 chewing_tip_host");
+            println!("  tsfreg -x           匯出診斷資訊(JSON)");
             process::exit(1);
         }
 
