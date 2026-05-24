@@ -21,7 +21,6 @@ jobs:
   release:
     runs-on: ubuntu-latest
     name: Release
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     needs: [code-signing]
     permissions:
       contents: write
@@ -45,12 +44,12 @@ jobs:
       - name: GH Release
         uses: softprops/action-gh-release@v3.0.0
         with:
-          tag_name: v${{github.ref_name}}
-          name: 穩定版 ${{github.ref_name}}
+          tag_name: ${{ github.ref_name }}
+          name: 穩定版 ${{ github.ref_name }}
           draft: true
           preserve_order: true
           body: |
             更新摘要
           files: |
-            dist/windows-chewing-tsf-${{github.ref_name}}.msi
-            dist/windows-chewing-tsf-${{github.ref_name}}.msi.sha256
+            dist/windows-chewing-tsf-${{ github.ref_name }}.msi
+            dist/windows-chewing-tsf-${{ github.ref_name }}.msi.sha256

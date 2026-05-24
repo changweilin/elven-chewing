@@ -1,10 +1,5 @@
 name: Nightly Build
 
-env:
-  VER_MAJOR: 26
-  VER_MINOR: 4
-  VER_PATCH: 1
-
 on:
   workflow_dispatch:
 
@@ -39,11 +34,16 @@ jobs:
         with:
           name: Signed Installer
           path: dist
+      - id: version
+        name: Read generated product version
+        run: |
+          version="$(python -c "import json; print(json.load(open('build/installer/version.json', encoding='utf-8'))['product_version'])")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: GH Release
         uses: softprops/action-gh-release@v3.0.0
         with:
-          tag_name: nightly-${{env.VER_MAJOR}}.${{env.VER_MINOR}}.${{env.VER_PATCH}}.${{github.run_number}}
-          name: 預覽版 ${{env.VER_MAJOR}}.${{env.VER_MINOR}}.${{env.VER_PATCH}}.${{github.run_number}}
+          tag_name: nightly-${{ steps.version.outputs.version }}
+          name: 預覽版 ${{ steps.version.outputs.version }}
           draft: true
           prerelease: true
           preserve_order: true

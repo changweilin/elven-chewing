@@ -14,7 +14,7 @@ taskkill /F /IM notepad.exe 2>$null
 taskkill /F /IM chewing_tip_host.exe 2>$null
 
 # 3. 覆寫安裝目錄的 DLL (前提:之前用 MSI 裝過一次)
-Copy-Item target\release\chewing_tip.dll "C:\Program Files\ChewingTextService\" -Force
+Copy-Item target\release\chewing_tip.dll "C:\Program Files\ElvenIME\" -Force
 
 # 4. 開新 notepad 測
 notepad
@@ -29,7 +29,7 @@ notepad
   - 避開 Edge / UWP / 新版 Office — AppContainer,讀 registry 要走 ACL,若懷疑 sandbox 問題才測這些
 - **host 程序**: 候選字視窗、語言列在 `chewing_tip_host.exe`。改 host 端只需 `taskkill /F /IM chewing_tip_host.exe`,tip 下次需要時會 lazy spawn,**完全不用碰 DLL**。
 - **改 GUID / 改 IPC schema / 改 categories** 才需要重跑 `tsfreg.exe register` (或重裝 MSI)。
-- **改 registry schema** (`config.rs`) → 不用重開機,但要記得清舊值: `Remove-Item HKCU:\Software\ChewingTextService -Recurse`。
+- **改 registry schema** (`config.rs`) → 不用重開機,但要記得清舊值: `Remove-Item HKCU:\Software\ElvenIME -Recurse`。舊版 `HKCU:\Software\ChewingTextService` 只作 migration fallback。
 
 ## 最快迴圈
 

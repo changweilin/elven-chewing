@@ -3,8 +3,9 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use chewing_tip_core::result::ResultExt;
-use windows_registry::CURRENT_USER;
+use chewing_tip_core::{config::REGISTRY_ROOT, result::ResultExt};
+use windows::Win32::System::Registry::KEY_WOW64_64KEY;
+use windows_registry::{CURRENT_USER, Key};
 
 use super::version;
 
@@ -14,9 +15,7 @@ pub(crate) struct CheckUpdateConfig {
 }
 
 pub(crate) fn get_check_update_config() -> Result<CheckUpdateConfig, CheckUpdateError> {
-    let key = CURRENT_USER
-        .create(r"Software\ElvenIME")
-        .boxed()?;
+    let key = open_update_config_key().boxed()?;
     let channel = match key.get_string("AutoCheckUpdateChannel") {
         Ok(ch) => ch,
         Err(_) => {
@@ -30,9 +29,7 @@ pub(crate) fn get_check_update_config() -> Result<CheckUpdateConfig, CheckUpdate
 }
 
 pub(crate) fn set_update_info_url(url: &str) -> Result<(), SetUpdateInfoError> {
-    let key = CURRENT_USER
-        .create(r"Software\ElvenIME")
-        .boxed()?;
+    let key = open_update_config_key().boxed()?;
     if url.is_empty() {
         key.remove_value("UpdateInfoUrl").boxed()?;
     } else {
@@ -47,11 +44,18 @@ pub(crate) fn set_last_update_check_time() -> Result<(), SetUpdateInfoError> {
         .as_ref()
         .map(Duration::as_secs)
         .unwrap_or_default();
-    let key = CURRENT_USER
-        .create(r"Software\ElvenIME")
-        .boxed()?;
+    let key = open_update_config_key().boxed()?;
     key.set_u64("LastUpdateCheckTime", now).boxed()?;
     Ok(())
+}
+
+fn open_update_config_key() -> windows_registry::Result<Key> {
+    CURRENT_USER
+        .options()
+        .create()
+        .access(KEY_WOW64_64KEY.0)
+        .write()
+        .open(REGISTRY_ROOT)
 }
 
 #[derive(Debug, thiserror::Error)]

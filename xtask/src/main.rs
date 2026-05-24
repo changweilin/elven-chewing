@@ -16,14 +16,10 @@ mod flags {
         cmd xtask {
             /// Update the version.rc file.
             cmd update-version {
-                /// The major version of the release. (u32)
-                required --major MAJOR: u32
-                /// The minor version of the release. (u32)
-                required --minor MINOR: u32
-                /// The patch version of the release. (u32)
-                required --patch PATCH: u32
+                /// Product version. Defaults to [workspace.package].version.
+                optional --version VERSION: String
                 /// Optional build number (u32)
-                optional -b, --build BUILD_NUMBER: u32
+                optional -b, --build BUILD: u32
             }
             /// Build the installer.
             cmd build-installer {
@@ -65,9 +61,7 @@ mod flags {
 
     #[derive(Debug)]
     pub struct UpdateVersion {
-        pub major: u32,
-        pub minor: u32,
-        pub patch: u32,
+        pub version: Option<String>,
         pub build: Option<u32>,
     }
 

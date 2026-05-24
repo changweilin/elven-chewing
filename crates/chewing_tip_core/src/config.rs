@@ -31,6 +31,9 @@ use windows::{
 };
 use windows_registry::{CURRENT_USER, Key};
 
+pub const REGISTRY_ROOT: &str = r"Software\ElvenIME";
+pub const LEGACY_REGISTRY_ROOT: &str = r"Software\ChewingTextService";
+
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct Config {
     pub chewing_tsf: ChewingTsfConfig,
@@ -211,13 +214,7 @@ impl Config {
         }
     }
     pub fn from_reg() -> Result<Config, ConfigError> {
-        let err = || ConfigError("failed to load config from registry".to_string());
-        let key = CURRENT_USER
-            .options()
-            .read()
-            .access(KEY_WOW64_64KEY.0)
-            .open("Software\\ElvenIME")
-            .or_raise(err)?;
+        let key = open_config_key_for_read()?;
         let mut cfg = ChewingTsfConfig::default();
 
         // if let Ok(path) = user_symbols_dat_path() {
@@ -386,13 +383,7 @@ impl Config {
     pub fn save_reg(&self) {
         let chewing_tsf = &self.chewing_tsf;
 
-        let Ok(key) = CURRENT_USER
-            .options()
-            .create()
-            .access(KEY_WOW64_64KEY.0)
-            .write()
-            .open("Software\\ElvenIME")
-        else {
+        let Ok(key) = create_config_key_for_write() else {
             error!("Unable to open registry for write");
             return;
         };
@@ -583,6 +574,36 @@ impl Display for KeybindValue {
         }
         Ok(())
     }
+}
+
+fn open_config_key_for_read() -> Result<Key, ConfigError> {
+    let open = |path| {
+        CURRENT_USER
+            .options()
+            .read()
+            .access(KEY_WOW64_64KEY.0)
+            .open(path)
+    };
+
+    match open(REGISTRY_ROOT) {
+        Ok(key) => Ok(key),
+        Err(primary_error) => match open(LEGACY_REGISTRY_ROOT) {
+            Ok(key) => Ok(key),
+            Err(legacy_error) => bail!(ConfigError(format!(
+                "failed to load config from registry paths {REGISTRY_ROOT:?} ({primary_error:?}) and {LEGACY_REGISTRY_ROOT:?} ({legacy_error:?})"
+            ))),
+        },
+    }
+}
+
+fn create_config_key_for_write() -> Result<Key, ConfigError> {
+    CURRENT_USER
+        .options()
+        .create()
+        .access(KEY_WOW64_64KEY.0)
+        .write()
+        .open(REGISTRY_ROOT)
+        .or_raise(|| ConfigError(format!("failed to open registry path {REGISTRY_ROOT:?}")))
 }
 
 fn grant_app_container_access(

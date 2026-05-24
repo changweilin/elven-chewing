@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug)]
+#[serde(default)]
 pub struct MethodCall {
     pub method: String,
     pub parameters: Value,
@@ -10,7 +11,8 @@ pub struct MethodCall {
     pub upgrade: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug)]
+#[serde(default)]
 pub struct MethodReply {
     pub parameters: Value,
     pub continues: Option<bool>,

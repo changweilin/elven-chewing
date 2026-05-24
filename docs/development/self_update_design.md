@@ -63,5 +63,5 @@ preferences.
 ## Notify Updates
 
 Whenever a new update is detected, `chewing_tip_host` shall store the update
-URL to the registry key `HKCU\Software\ChewingTextService`, attribute name
-UpdateAvailable. Otherwise, this attribute should be removed.
+URL to the registry key `HKCU\Software\ElvenIME`, attribute name
+`UpdateInfoUrl`. Otherwise, this attribute should be removed.

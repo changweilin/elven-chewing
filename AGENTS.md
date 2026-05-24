@@ -96,7 +96,8 @@ xtask/                cargo xtask build/package automation
 **關鍵檔案**: `crates/chewing_tip_core/src/config.rs`、`sandbox.rs`、`shell.rs`,WiX `.wxs` 中 RegistryKey component。
 
 **領域知識**:
-- 儲存於 `HKEY_CURRENT_USER\Software\ChewingTextService`,view = `KEY_WOW64_64KEY`
+- 儲存於 `HKEY_CURRENT_USER\Software\ElvenIME`,view = `KEY_WOW64_64KEY`
+- 舊版 `HKEY_CURRENT_USER\Software\ChewingTextService` 僅作讀取 migration fallback,新寫入一律走 `ElvenIME`
 - 序列化用 `serde::{Serialize, Deserialize}` (字串 / JSON)
 - AppContainer (Edge、Store App、新 Office) 需要 `ALL_APPLICATION_PACKAGES` DACL,否則沙箱程序讀預設值
 - DACL 流程: `AllocateAndInitializeSid(SECURITY_APP_PACKAGE_AUTHORITY)` → `EXPLICIT_ACCESS_W` → `SetEntriesInAclW` → `SetNamedSecurityInfoW`

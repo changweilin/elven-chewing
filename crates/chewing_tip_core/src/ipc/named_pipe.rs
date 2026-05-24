@@ -34,10 +34,10 @@ use windows::{
     core::{HSTRING, PCWSTR, PWSTR},
 };
 
-use crate::ipc::IpcError;
-use crate::sandbox::get_user_cred;
+use crate::{ipc::IpcError, sandbox::get_user_cred, shell::program_dir};
 
 pub const NAMED_PIPE_PATH_BASE: &str = r"\\.\pipe\elven-ime.";
+const HOST_EXE_NAME: &str = "chewing_tip_host.exe";
 
 pub fn named_pipe_path() -> Result<String, IpcError> {
     let err = || IpcError(format!("failed to create unique user local NamedPipe path"));
@@ -116,7 +116,7 @@ pub fn connect_and_attest(
 }
 
 fn attest_server(pid: u32) -> Result<(), IpcError> {
-    let err = || IpcError(format!("failed to attest server executible"));
+    let err = || IpcError(format!("failed to attest server executable"));
 
     let exe_path = unsafe {
         let mut buffer = [0u16; MAX_PATH as usize];
@@ -131,8 +131,13 @@ fn attest_server(pid: u32) -> Result<(), IpcError> {
             }
             bail!(err());
         }
+        if let Err(error) = CloseHandle(handle) {
+            bail!(Exn::new(error).raise(err()));
+        }
         PathBuf::from(pwpath.to_string().or_raise(err)?)
     };
+
+    verify_host_image_path(&exe_path)?;
 
     if !verify_trust(&exe_path) {
         bail!(IpcError(format!(
@@ -142,6 +147,36 @@ fn attest_server(pid: u32) -> Result<(), IpcError> {
     }
 
     Ok(())
+}
+
+fn verify_host_image_path(path: &Path) -> Result<(), IpcError> {
+    let err = || IpcError(format!("failed to validate chewing_tip_host path"));
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    if !file_name.eq_ignore_ascii_case(HOST_EXE_NAME) {
+        bail!(IpcError(format!(
+            "unexpected host executable name: {}",
+            path.display()
+        )));
+    }
+
+    let expected = program_dir().or_raise(err)?.join(HOST_EXE_NAME);
+    if !path_eq_ignore_ascii_case(path, &expected) {
+        bail!(IpcError(format!(
+            "unexpected host executable path: {}, expected {}",
+            path.display(),
+            expected.display()
+        )));
+    }
+    Ok(())
+}
+
+fn path_eq_ignore_ascii_case(left: &Path, right: &Path) -> bool {
+    left.as_os_str()
+        .to_string_lossy()
+        .eq_ignore_ascii_case(&right.as_os_str().to_string_lossy())
 }
 
 fn os_to_wstring(value: &OsStr) -> Vec<u16> {
@@ -193,4 +228,27 @@ pub fn verify_trust(path: &Path) -> bool {
     }
 
     status == S_OK.0
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::path_eq_ignore_ascii_case;
+
+    #[test]
+    fn windows_host_path_comparison_is_case_insensitive() {
+        assert!(path_eq_ignore_ascii_case(
+            Path::new(r"C:\Program Files\ElvenIME\chewing_tip_host.exe"),
+            Path::new(r"c:\program files\elvenime\CHEWING_TIP_HOST.EXE"),
+        ));
+    }
+
+    #[test]
+    fn windows_host_path_comparison_rejects_other_locations() {
+        assert!(!path_eq_ignore_ascii_case(
+            Path::new(r"C:\Temp\chewing_tip_host.exe"),
+            Path::new(r"C:\Program Files\ElvenIME\chewing_tip_host.exe"),
+        ));
+    }
 }
