@@ -3,9 +3,10 @@
 
 #![windows_subsystem = "windows"]
 
-use std::{env, process};
+use std::{env, fs, process};
 
 use chewing_tip_core::{
+    config::Config,
     diagnostics::collect_diagnostics,
     ipc::{client::ChewingIpcClient, messages::Stop, varlink::MethodCall},
 };
@@ -181,11 +182,39 @@ fn stop() {
     }
 }
 
+fn option_value(args: &[String], name: &str) -> Option<String> {
+    args.windows(2)
+        .find(|pair| pair[0] == name)
+        .map(|pair| pair[1].clone())
+}
+
+fn export_profile(path: &str) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let cfg = Config::from_reg().unwrap_or_default();
+    fs::write(path, cfg.to_profile_json()?)?;
+    Ok(())
+}
+
+fn import_profile(path: &str) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let raw = fs::read_to_string(path)?;
+    let cfg = Config::from_profile_json(&raw)?;
+    cfg.save_reg();
+    Ok(())
+}
+
 fn main() -> Result<()> {
-    if env::args().any(|arg| arg == "-x" || arg == "--diagnostics") {
+    let args = env::args().collect::<Vec<_>>();
+    if args.iter().any(|arg| {
+        matches!(
+            arg.as_str(),
+            "-x" | "--diagnostics" | "--export-profile" | "--import-profile"
+        )
+    }) {
         unsafe {
             let _ = AttachConsole(ATTACH_PARENT_PROCESS);
         }
+    }
+
+    if args.iter().any(|arg| arg == "-x" || arg == "--diagnostics") {
         let report = collect_diagnostics();
         match serde_json::to_string_pretty(&report) {
             Ok(json) => println!("{json}"),
@@ -197,13 +226,31 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    if let Some(path) = option_value(&args, "--export-profile") {
+        if let Err(error) = export_profile(&path) {
+            println!("Error: failed to export profile: {error}");
+            process::exit(1);
+        }
+        println!("Exported profile to {path}");
+        return Ok(());
+    }
+
+    if let Some(path) = option_value(&args, "--import-profile") {
+        if let Err(error) = import_profile(&path) {
+            println!("Error: failed to import profile: {error}");
+            process::exit(1);
+        }
+        println!("Imported profile from {path}");
+        return Ok(());
+    }
+
     unsafe {
         if IsDebuggerPresent().as_bool() {
             let _ = AttachConsole(ATTACH_PARENT_PROCESS);
         }
         CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
 
-        if env::args().len() == 1 {
+        if args.len() == 1 {
             println!("Usage:");
             println!("  tsfreg -r <IconPath>    註冊輸入法");
             println!("  tsfreg -i           立即啟用輸入法");
@@ -211,17 +258,19 @@ fn main() -> Result<()> {
             println!("  tsfreg -u                 取消註冊");
             println!("  tsfreg -s   停止 chewing_tip_host");
             println!("  tsfreg -x           匯出診斷資訊(JSON)");
+            println!("  tsfreg --export-profile <Path>  匯出設定 profile");
+            println!("  tsfreg --import-profile <Path>  匯入設定 profile");
             process::exit(1);
         }
 
-        if let Some("-r") = env::args().nth(1).as_deref() {
-            let icon_path = env::args().nth(2).expect("缺少 IconPath");
+        if let Some("-r") = args.get(1).map(String::as_str) {
+            let icon_path = args.get(2).expect("缺少 IconPath").clone();
             register(icon_path)?;
-        } else if let Some("-i") = env::args().nth(1).as_deref() {
+        } else if let Some("-i") = args.get(1).map(String::as_str) {
             enable();
-        } else if let Some("-d") = env::args().nth(1).as_deref() {
+        } else if let Some("-d") = args.get(1).map(String::as_str) {
             disable();
-        } else if let Some("-s") = env::args().nth(1).as_deref() {
+        } else if let Some("-s") = args.get(1).map(String::as_str) {
             stop();
         } else if let Err(err) = unregister() {
             println!("警告：無法解除輸入法註冊，反安裝可能無法正常完成。");

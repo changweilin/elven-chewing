@@ -175,6 +175,16 @@ http://localhost:5173
 - 使用者設定：`HKCU\Software\ElvenIME`
 - MSI 輸出：`dist\windows-chewing-tsf-unsigned.msi`
 
+中期功能支援入口：
+
+```powershell
+tsfreg -x
+tsfreg --export-profile .\elven-ime-profile.json
+tsfreg --import-profile .\elven-ime-profile.json
+```
+
+更新檢查除了 `UpdateInfoUrl`，也會在 registry 保留版本、artifact URL、checksum 與 release description，供設定工具或未來 UI 顯示。
+
 ## 授權條款
 
 本專案授權條款繼承新酷音專案，原始碼以 GNU General Public License v3.0 or later (`GPL-3.0-or-later`) 釋出。完整授權文字請見 `COPYING.txt`。

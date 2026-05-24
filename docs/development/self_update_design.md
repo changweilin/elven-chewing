@@ -64,4 +64,12 @@ preferences.
 
 Whenever a new update is detected, `chewing_tip_host` shall store the update
 URL to the registry key `HKCU\Software\ElvenIME`, attribute name
-`UpdateInfoUrl`. Otherwise, this attribute should be removed.
+`UpdateInfoUrl`. It also stores optional metadata from the release feed:
+
+- `UpdateInfoVersion`
+- `UpdateArtifactLocation`
+- `UpdateArtifactChecksum`
+- `UpdateArtifactChecksumType`
+- `UpdateDescription`
+
+Otherwise, these attributes should be removed.

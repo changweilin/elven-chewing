@@ -203,6 +203,16 @@ impl Default for ChewingTsfConfig {
 }
 
 impl Config {
+    pub fn from_profile_json(raw: &str) -> Result<Config, ConfigError> {
+        serde_json::from_str(raw)
+            .or_raise(|| ConfigError("failed to parse config profile JSON".to_string()))
+    }
+
+    pub fn to_profile_json(&self) -> Result<String, ConfigError> {
+        serde_json::to_string_pretty(self)
+            .or_raise(|| ConfigError("failed to serialize config profile JSON".to_string()))
+    }
+
     pub fn reload_if_needed(&mut self) -> Result<bool, ConfigError> {
         let cfg =
             Config::from_reg().or_raise(|| ConfigError("failed to reload config".to_string()))?;
@@ -778,5 +788,13 @@ mod test {
         let keybind = "ctrl+c=text:酷";
         let value: KeybindValue = keybind.parse().unwrap();
         assert_eq!(keybind, value.to_string());
+    }
+
+    #[test]
+    fn config_profile_json_roundtrips_defaults() {
+        let cfg = crate::config::Config::default();
+        let json = cfg.to_profile_json().unwrap();
+        let loaded = crate::config::Config::from_profile_json(&json).unwrap();
+        assert_eq!(cfg, loaded);
     }
 }
