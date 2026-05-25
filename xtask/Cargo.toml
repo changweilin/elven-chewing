@@ -10,3 +10,10 @@ indoc = "2.0.5"
 jiff = { version = "0.2.0", default-features = false, features = ["std"] }
 xflags = "0.3.2"
 xshell = "0.2.7"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = [
+  "Win32_Foundation",
+  "Win32_System_LibraryLoader",
+  "Win32_UI_WindowsAndMessaging",
+] }

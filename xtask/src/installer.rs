@@ -5,6 +5,7 @@ use std::{path::PathBuf, str::FromStr};
 use anyhow::{Error, Result, bail};
 use xshell::{Shell, cmd};
 
+use crate::branding::brand_prebuilt_tools;
 use crate::flags::{BuildInstaller, PackageInstaller};
 
 #[derive(Debug)]
@@ -119,10 +120,7 @@ pub(crate) fn build_installer(flags: BuildInstaller) -> Result<()> {
             sh.copy_file(file, "../build/installer")?;
         }
     }
-    sh.copy_file(
-        "tip/rc/elven_ime.ico",
-        "build/installer/chewing.ico",
-    )?;
+    sh.copy_file("tip/rc/elven_ime.ico", "build/installer/chewing.ico")?;
     sh.copy_file("build/bin/chewing-cli.exe", "build/installer")?;
 
     sh.create_dir("build/installer/Dictionary")?;
@@ -166,11 +164,15 @@ pub(crate) fn build_installer(flags: BuildInstaller) -> Result<()> {
         );
     }
 
+    brand_prebuilt_tools()?;
+
     Ok(())
 }
 
 pub(crate) fn package_installer(_flags: PackageInstaller) -> Result<()> {
     let sh = Shell::new()?;
+
+    brand_prebuilt_tools()?;
 
     sh.create_dir("dist")?;
     {

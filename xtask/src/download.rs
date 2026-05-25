@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use xshell::{Shell, cmd};
 
+use crate::branding::brand_prebuilt_tools;
 use crate::flags::DownloadComponents;
 
 const MANIFEST: [(&str, &str, &str, &str); 3] = [
@@ -30,6 +31,7 @@ pub(crate) fn download_components(_flags: DownloadComponents) -> Result<()> {
         let (url, sig_url, output, dest) = component;
         sq_download(url, sig_url, "release.pgp", output, dest).with_context(err)?;
     }
+    brand_prebuilt_tools()?;
     Ok(())
 }
 

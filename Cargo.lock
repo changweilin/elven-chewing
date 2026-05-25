@@ -2065,6 +2065,7 @@ dependencies = [
  "anyhow",
  "indoc",
  "jiff",
+ "windows",
  "xflags",
  "xshell",
 ]

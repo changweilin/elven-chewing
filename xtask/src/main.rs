@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 
+mod branding;
 mod download;
 mod installer;
 mod version;
