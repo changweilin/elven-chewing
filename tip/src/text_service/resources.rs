@@ -35,7 +35,6 @@ pub(super) const ID_ABOUT_ME_LINKEDIN: u32 = 40035;
 pub(super) const ID_ABOUT_ME_DEMO: u32 = 40036;
 pub(super) const ID_CHECK_NEW_VER: u32 = 40006;
 pub(super) const ID_WEBSITE: u32 = 40007;
-pub(super) const ID_GROUP: u32 = 40008;
 pub(super) const ID_BUGREPORT: u32 = 40009;
 pub(super) const ID_DICT_BUGREPORT: u32 = 40010;
 pub(super) const ID_MOEDICT: u32 = 40025;

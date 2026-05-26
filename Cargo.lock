@@ -290,6 +290,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "elven_config"
+version = "26.7.1"
+dependencies = [
+ "chewing_tip_core",
+ "windows",
+]
+
+[[package]]
 name = "embed-resource"
 version = "3.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

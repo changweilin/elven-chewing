@@ -257,7 +257,6 @@ def render_app_icon(size, ss=4):
 
 def write_favicons():
     static = os.path.join(ROOT, "crates", "web_demo", "static")
-    render_app_icon(32).save(os.path.join(static, "favicon-32.png"))
     render_app_icon(180).save(os.path.join(static, "apple-touch-icon.png"))
     master = render_app_icon(256)
     master.save(os.path.join(static, "favicon.ico"), sizes=[(16, 16), (32, 32), (48, 48)])

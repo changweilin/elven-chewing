@@ -5,4 +5,3 @@
 #define ABOUT_CAPTION_WITH_VER      "關於精靈語輸入法 (26.7.1.0)\0"
 #define ABOUT_VERSION_STR           "版本：26.7.1.0\0"
 #define ABOUT_RELEASE_DATE_STR      "發行日期：2026 年 05 月 24 日\0"
-#define PREFS_TITLE_WITH_VER        "設定精靈語輸入法 (26.7.1.0)\0"

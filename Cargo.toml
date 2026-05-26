@@ -4,6 +4,7 @@ members = [
   "crates/chewing_engine_kit",
   "crates/chewing_tip_core",
   "crates/chewing_tip_host",
+  "crates/elven_config",
   "crates/tsfreg",
   "crates/web_demo",
   "tip",

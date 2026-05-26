@@ -132,7 +132,6 @@ BEGIN
             MENUITEM "Demo Link",                           ID_ABOUT_ME_DEMO
         END
         MENUITEM "參觀精靈語輸入法官方網站(&W)",         ID_WEBSITE
-        MENUITEM "精靈語輸入法線上討論區(&G)",          ID_GROUP
         MENUITEM SEPARATOR
         MENUITEM "軟體本身的建議及錯誤回報(&B)",            ID_BUGREPORT
         MENUITEM "注音及選字選詞錯誤回報 (&P)",            ID_DICT_BUGREPORT
@@ -169,7 +168,6 @@ BEGIN
     IDS_SWITCH_SHAPE        "全形/半形切換"
     IDS_SWITCH_LANG         "中文/英文切換"
     IDS_SETTINGS            "設定/工具選單"
-    IDS_CONFIG_TITLE        "設定精靈語輸入法"
 END
 
 #endif    // Chinese (Traditional, Taiwan) resources

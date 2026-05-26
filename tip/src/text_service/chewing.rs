@@ -329,7 +329,7 @@ impl ChewingTextService {
             ID_SWITCH_SHAPE,
         )?;
 
-        info!("Add button for settings and others, may open a popup menu");
+        info!("Add button for settings and tools, may open a popup menu");
         let settings_button = factory.create_button(
             GUID_SETTINGS_BUTTON,
             TF_LBI_STYLE_BTN_MENU,
@@ -1214,15 +1214,14 @@ impl ChewingTextService {
                         error!("local installer not found at {}", msi.display());
                     }
                 }
-                ID_ABOUT => open_url("elven-ime-preferences://about"),
+                ID_ABOUT => open_url("https://github.com/changweilin/elven-chewing#readme"),
                 ID_ABOUT_ME_GITHUB => open_url("https://github.com/changweilin"),
                 ID_ABOUT_ME_LINKEDIN => {
                     open_url("https://www.linkedin.com/in/wei-lin-chang-ba38049a/")
                 }
                 ID_ABOUT_ME_DEMO => open_url("https://changweilin.github.io/demo_link/"),
-                ID_WEBSITE => open_url("https://chewing.im/"),
-                ID_GROUP => open_url("https://groups.google.com/group/chewing-devel"),
-                ID_BUGREPORT => open_url("https://codeberg.org/chewing/windows-chewing-tsf/issues"),
+                ID_WEBSITE => open_url("https://github.com/changweilin/elven-chewing"),
+                ID_BUGREPORT => open_url("https://github.com/changweilin/elven-chewing/issues"),
                 ID_DICT_BUGREPORT => {
                     open_url("https://codeberg.org/chewing/libchewing-data/issues")
                 }
@@ -1231,7 +1230,7 @@ impl ChewingTextService {
                 ID_SIMPDICT => open_url("https://dict.concised.moe.edu.tw/"),
                 ID_LITTLEDICT => open_url("https://dict.mini.moe.edu.tw/"),
                 ID_PROVERBDICT => open_url("https://dict.idioms.moe.edu.tw/"),
-                ID_CHEWING_HELP => open_url("https://chewing.im/features.html"),
+                ID_CHEWING_HELP => open_url("https://github.com/changweilin/elven-chewing#readme"),
                 _ => {}
             }
         }

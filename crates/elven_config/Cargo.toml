@@ -1,0 +1,17 @@
+[package]
+name = "elven_config"
+version.workspace = true
+edition = "2024"
+
+[[bin]]
+name = "elven-config"
+path = "src/main.rs"
+
+[dependencies]
+chewing_tip_core = { path = "../chewing_tip_core" }
+windows = { version = "0.62.2", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_LibraryLoader",
+  "Win32_UI_WindowsAndMessaging"
+] }

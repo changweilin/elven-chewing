@@ -38,7 +38,7 @@
                     <RemoveFile Name="Uninstall.exe" On="install" />
                 </Component>
                 <Component Bitness="always64">
-                    <File Source="ChewingPreferences.exe" KeyPath="yes">
+                    <File Source="elven-config.exe" KeyPath="yes">
                         <Shortcut Advertise="yes" Icon="icon.exe" Name="設定精靈語輸入法" Directory="ApplicationProgramsFolder" />
                     </File>
                     <RemoveFolder Directory="ApplicationProgramsFolder" On="uninstall" />
@@ -61,11 +61,11 @@
                     </RegistryKey>
                     <!-- Default icon -->
                     <RegistryKey Root="HKCR" Key="elven-ime-preferences\DefaultIcon">
-                        <RegistryValue Type="string" Value="[INSTALLFOLDER64]ChewingPreferences.exe,0" />
+                        <RegistryValue Type="string" Value="[INSTALLFOLDER64]elven-config.exe,0" />
                     </RegistryKey>
                     <!-- Shell command -->
                     <RegistryKey Root="HKCR" Key="elven-ime-preferences\shell\open\command">
-                        <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER64]ChewingPreferences.exe&quot; &quot;%1&quot;" />
+                        <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER64]elven-config.exe&quot; &quot;%1&quot;" />
                     </RegistryKey>
                     <!-- Main protocol key -->
                     <RegistryKey Root="HKCR" Key="elven-ime-editor">

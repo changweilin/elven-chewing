@@ -4,10 +4,7 @@ use std::{fs, path::Path};
 
 use anyhow::{Context, Result, bail};
 
-const PREBUILT_TOOLS: [&str; 2] = [
-    "build/installer/ChewingPreferences.exe",
-    "build/installer/chewing-editor.exe",
-];
+const PREBUILT_TOOLS: [&str; 1] = ["build/installer/chewing-editor.exe"];
 
 const CHEWING_LINKS: [&str; 5] = [
     "https://chewing.im",

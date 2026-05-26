@@ -94,6 +94,11 @@ pub(crate) fn build_installer(flags: BuildInstaller) -> Result<()> {
         .run()?;
         cmd!(
             sh,
+            "cargo build -p elven_config {release...} --target {x86_64_target}"
+        )
+        .run()?;
+        cmd!(
+            sh,
             "cargo build -p tsfreg {release...} {nightly...} {unsigned_host...} --target {x86_64_target}"
         )
         .run()?;
@@ -138,13 +143,13 @@ pub(crate) fn build_installer(flags: BuildInstaller) -> Result<()> {
             "build/installer/x64",
         );
     }
-    for file in ["chewing_tip_host.exe", "tsfreg.exe"] {
+    for file in ["chewing_tip_host.exe", "elven-config.exe", "tsfreg.exe"] {
         sh.copy_file(
             format!("{}/{file}", x86_64_target_dir.display()),
             "build/installer",
         )?;
     }
-    for file in ["chewing_tip_host.pdb", "tsfreg.pdb"] {
+    for file in ["chewing_tip_host.pdb", "elven-config.pdb", "tsfreg.pdb"] {
         let _ = sh.copy_file(
             format!("{}/{file}", x86_64_target_dir.display()),
             "build/installer",

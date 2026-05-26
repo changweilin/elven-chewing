@@ -29,7 +29,7 @@
 Start-Process -FilePath .\dist\windows-chewing-tsf-unsigned.msi
 ```
 
-安裝程式會註冊 TSF profile、安裝字典、設定工具與使用者詞庫編輯器。若安裝後輸入法沒有立即出現在輸入法清單中，請開啟 Windows 的「設定 > 時間與語言 > 語言與地區 > 鍵盤」，確認「精靈語輸入法」已加入；必要時登出再登入。
+安裝程式會註冊 TSF profile、安裝字典、精靈語設定工具與使用者詞庫編輯器。若安裝後輸入法沒有立即出現在輸入法清單中，請開啟 Windows 的「設定 > 時間與語言 > 語言與地區 > 鍵盤」，確認「精靈語輸入法」已加入；必要時登出再登入。
 
 ### 開發環境需求
 
@@ -98,7 +98,7 @@ dist/windows-chewing-tsf-unsigned.msi
 - 語言列圖示：切換中文/英文、全形/半形，或開啟設定/工具選單。
 - 數字鍵 `1` 到 `9`：選擇候選字。
 - 模糊注音猜詞：開啟後輸入不完整注音，再按 `↓` 觸發候選。
-- 雙排輸入模式：可在選單或設定中開啟，輸入時同時預覽中文與英文軌。
+- 雙排輸入模式：可在設定工具或工具選單中開啟，輸入時同時預覽中文與英文軌。
 - `Ctrl+F12`：切換簡體中文輸出。
 - `Ctrl+Delete`：在候選字選擇期間反學習片語。
 - `Ctrl+F11`：雙排輸入模式開啟時切換中文/英文輸出軌。
@@ -164,8 +164,8 @@ http://localhost:5173
 | --- | --- |
 | `chewing_tip.dll` | Windows TSF text service，負責接收按鍵、維護 composition、送出文字。 |
 | `chewing_tip_host.exe` | 顯示候選字、通知與雙排預覽等 UI，並處理更新檢查。 |
+| `elven-config.exe` | 精靈語原生設定工具，讀寫 `HKCU\Software\ElvenIME`。 |
 | `tsfreg.exe` | 安裝/解除安裝時註冊 TSF CLSID、profile 與 categories；`tsfreg -x` 可匯出診斷 JSON。 |
-| `ChewingPreferences.exe` | 外部下載的設定工具，由 MSI 一併安裝。 |
 | `ChewingEditor.exe` | 外部下載的使用者詞庫編輯工具，由 MSI 一併安裝。 |
 
 重要路徑：

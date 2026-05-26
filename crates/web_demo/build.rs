@@ -4,7 +4,7 @@
 //! The browser has no filesystem, so the engine cannot load `.dat` files at
 //! runtime the way the desktop IME does — we compile them in instead. The
 //! source images come from the libchewing-data release that `cargo xtask
-//! download` unpacks into `build/installer/Dictionary/`. Staging through
+//! download-components` unpacks into `build/installer/Dictionary/`. Staging through
 //! `OUT_DIR` keeps the `include_bytes!` paths stable and turns a missing
 //! download into a clear, actionable build error rather than a cryptic one.
 
@@ -33,7 +33,7 @@ fn main() {
             panic!(
                 "missing dictionary `{}`.\n\
                  The web demo embeds the real libchewing dictionaries; run \
-                 `cargo xtask download` to fetch them into \
+                 `cargo xtask download-components` to fetch them into \
                  `build/installer/Dictionary/`, or point CHEWING_DICT_DIR at a \
                  directory containing {DICTS:?}.\n\
                  looked in: {}",
