@@ -16,6 +16,8 @@ All notable changes to this project will be documented in this file.
   window focus change.
 - tip: fix low quality phrase selection caused by incompatible user phrase
   frequency interpretation (introduced in 26.4.1.0)
+- tip: add candidate shortcuts to jump between phrase and single-character
+  selection ranges.
 
 ### 🚜 Refactor
 

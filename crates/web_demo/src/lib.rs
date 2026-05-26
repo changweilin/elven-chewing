@@ -889,9 +889,13 @@ impl ChewingDemo {
     }
 
     fn settle_partial_syllable_for_commit(editor: &mut Editor) {
-        if editor.editor_options().lookup_strategy != LookupStrategy::FuzzyPartialPrefix
-            || !editor.entering_syllable()
-        {
+        if editor.editor_options().lookup_strategy != LookupStrategy::FuzzyPartialPrefix {
+            return;
+        }
+
+        let entering_syllable = editor.entering_syllable();
+        let has_unresolved_bopomofo = editor.display().chars().any(Self::is_bopomofo_char);
+        if !entering_syllable && !has_unresolved_bopomofo {
             return;
         }
 
@@ -899,10 +903,30 @@ impl ChewingDemo {
             .code(keycode::KEY_DOWN)
             .ksym(keysym::SYM_DOWN)
             .build();
-        editor.process_keyevent(down);
-        if editor.is_selecting() {
-            let _ = editor.cancel_selecting();
+
+        if entering_syllable {
+            editor.process_keyevent(down);
+            if editor.is_selecting() {
+                let _ = editor.cancel_selecting();
+            }
         }
+
+        if editor.display().chars().any(Self::is_bopomofo_char) {
+            editor.process_keyevent(
+                KeyboardEvent::builder()
+                    .code(keycode::KEY_HOME)
+                    .ksym(keysym::SYM_HOME)
+                    .build(),
+            );
+            editor.process_keyevent(down);
+            if editor.is_selecting() && editor.select(0).is_err() {
+                let _ = editor.cancel_selecting();
+            }
+        }
+    }
+
+    fn is_bopomofo_char(c: char) -> bool {
+        matches!(c, '\u{3100}'..='\u{312f}' | '\u{31a0}'..='\u{31bf}')
     }
 
     fn current_language_mode(&self) -> LanguageMode {

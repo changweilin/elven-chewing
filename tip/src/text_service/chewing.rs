@@ -1697,9 +1697,13 @@ impl ChewingTextService {
     }
 
     fn settle_partial_syllable_for_commit(editor: &mut Editor) {
-        if editor.editor_options().lookup_strategy != LookupStrategy::FuzzyPartialPrefix
-            || !editor.entering_syllable()
-        {
+        if editor.editor_options().lookup_strategy != LookupStrategy::FuzzyPartialPrefix {
+            return;
+        }
+
+        let entering_syllable = editor.entering_syllable();
+        let has_unresolved_bopomofo = editor.display().chars().any(Self::is_bopomofo_char);
+        if !entering_syllable && !has_unresolved_bopomofo {
             return;
         }
 
@@ -1707,10 +1711,30 @@ impl ChewingTextService {
             .code(keycode::KEY_DOWN)
             .ksym(keysym::SYM_DOWN)
             .build();
-        editor.process_keyevent(down);
-        if editor.is_selecting() {
-            let _ = editor.cancel_selecting();
+
+        if entering_syllable {
+            editor.process_keyevent(down);
+            if editor.is_selecting() {
+                let _ = editor.cancel_selecting();
+            }
         }
+
+        if editor.display().chars().any(Self::is_bopomofo_char) {
+            editor.process_keyevent(
+                KeyboardEvent::builder()
+                    .code(keycode::KEY_HOME)
+                    .ksym(keysym::SYM_HOME)
+                    .build(),
+            );
+            editor.process_keyevent(down);
+            if editor.is_selecting() && editor.select(0).is_err() {
+                let _ = editor.cancel_selecting();
+            }
+        }
+    }
+
+    fn is_bopomofo_char(c: char) -> bool {
+        matches!(c, '\u{3100}'..='\u{312f}' | '\u{31a0}'..='\u{31bf}')
     }
 
     /// 雙排模式: 餵入一個 ASCII 字元到英文軌
@@ -2533,6 +2557,53 @@ fn syl_editor_from_kbtype(kbtype: KeyboardLayoutCompat) -> Box<dyn SyllableEdito
         | KeyboardLayoutCompat::ColemakDhOrth
         | KeyboardLayoutCompat::Workman
         | KeyboardLayoutCompat::Colemak => Box::new(Standard::new()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chewing::input::keysym::{SYM_DOWN, SYM_END, SYM_HOME, SYM_SPACE, SYM_UP};
+
+    use super::*;
+
+    #[test]
+    fn candidate_range_shortcuts_accept_home_end_without_ctrl() {
+        assert!(ChewingTextService::is_candidate_range_shortcut(
+            &KeyboardEvent::builder().ksym(SYM_HOME).build()
+        ));
+        assert!(ChewingTextService::is_candidate_range_shortcut(
+            &KeyboardEvent::builder().ksym(SYM_END).build()
+        ));
+    }
+
+    #[test]
+    fn candidate_range_shortcuts_accept_ctrl_up_down() {
+        assert!(ChewingTextService::is_candidate_range_shortcut(
+            &KeyboardEvent::builder().ksym(SYM_UP).control().build()
+        ));
+        assert!(ChewingTextService::is_candidate_range_shortcut(
+            &KeyboardEvent::builder().ksym(SYM_DOWN).control().build()
+        ));
+    }
+
+    #[test]
+    fn candidate_range_shortcuts_reject_shortcut_like_variants() {
+        assert!(!ChewingTextService::is_candidate_range_shortcut(
+            &KeyboardEvent::builder().ksym(SYM_HOME).control().build()
+        ));
+        assert!(!ChewingTextService::is_candidate_range_shortcut(
+            &KeyboardEvent::builder().ksym(SYM_DOWN).build()
+        ));
+        assert!(!ChewingTextService::is_candidate_range_shortcut(
+            &KeyboardEvent::builder()
+                .ksym(SYM_DOWN)
+                .control()
+                .shift()
+                .build()
+        ));
+        assert!(!ChewingTextService::is_candidate_range_shortcut(
+            &KeyboardEvent::builder().ksym(SYM_SPACE).control().build()
+        ));
     }
 }
 
