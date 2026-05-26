@@ -566,7 +566,9 @@ impl ChewingTextService {
         }
         if evt.is_state_on(KeyState::Control) {
             // bypass IME. This might be a shortcut key used in the application
-            if self.is_composing() && evt.ksym.is_digit() {
+            if self.chewing_editor.is_selecting() && Self::is_candidate_range_shortcut(&evt) {
+                return Ok(true);
+            } else if self.is_composing() && evt.ksym.is_digit() {
                 // need to handle userphrase
                 return Ok(true);
             } else if evt.is_state_on(KeyState::Shift)
@@ -716,6 +718,10 @@ impl ChewingTextService {
             if handled {
                 return Ok(true);
             }
+        }
+
+        if self.handle_candidate_range_shortcut(context, &evt)? {
+            return Ok(true);
         }
 
         let mut input_mode = self.current_language_mode();
@@ -1885,6 +1891,67 @@ impl ChewingTextService {
     fn hide_candidates(&mut self) {
         if let Some(candidate_list) = self.candidate_list.take() {
             candidate_list.end_ui_element();
+        }
+    }
+
+    fn handle_candidate_range_shortcut(
+        &mut self,
+        context: &ITfContext,
+        evt: &KeyboardEvent,
+    ) -> Result<bool> {
+        if !self.chewing_editor.is_selecting() || !Self::is_candidate_range_shortcut(evt) {
+            return Ok(false);
+        }
+
+        let result = match evt.ksym {
+            keysym::SYM_END | keysym::SYM_DOWN => {
+                self.chewing_editor.jump_to_last_selection_point()
+            }
+            keysym::SYM_HOME | keysym::SYM_UP => {
+                self.chewing_editor.jump_to_first_selection_point()
+            }
+            _ => return Ok(false),
+        };
+
+        if let Err(error) = result {
+            debug!("unable to jump candidate selection range: {error}");
+            self.clear_reconvert_scope();
+            return Ok(true);
+        }
+
+        self.rewind_candidate_page();
+        self.update_candidates(context)?;
+        self.clear_reconvert_scope();
+        Ok(true)
+    }
+
+    fn is_candidate_range_shortcut(evt: &KeyboardEvent) -> bool {
+        if evt.is_state_on(KeyState::Alt)
+            || evt.is_state_on(KeyState::Shift)
+            || evt.is_state_on(KeyState::Super)
+        {
+            return false;
+        }
+
+        match evt.ksym {
+            keysym::SYM_HOME | keysym::SYM_END => !evt.is_state_on(KeyState::Control),
+            keysym::SYM_UP | keysym::SYM_DOWN => evt.is_state_on(KeyState::Control),
+            _ => false,
+        }
+    }
+
+    fn rewind_candidate_page(&mut self) {
+        while self
+            .chewing_editor
+            .current_page_no()
+            .is_ok_and(|page| page > 0)
+        {
+            self.chewing_editor.process_keyevent(
+                KeyboardEvent::builder()
+                    .code(keycode::KEY_PAGEUP)
+                    .ksym(keysym::SYM_PAGEUP)
+                    .build(),
+            );
         }
     }
 
